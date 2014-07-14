@@ -13,6 +13,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'cyclone',
+        'zope.interface',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
