@@ -4,12 +4,10 @@ Package containing collection implementations.
 Available implementations are imported from subpackages.
 """
 
-from go_store_service.collections.inmemory import (
-    InMemoryCollection, InMemoryCollectionBackend)
-
-from go_store_service.collections.riak import RiakCollectionBackend
+from .interfaces import ICollection
+from .inmemory import InMemoryCollection
 
 __all__ = [
-    'InMemoryCollection', 'InMemoryCollectionBackend',
-    'RiakCollectionBackend',
+    'ICollection',
+    'InMemoryCollection',
 ]
