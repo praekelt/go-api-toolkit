@@ -105,6 +105,15 @@ class TestCollectionHandler(TestCase):
             urlspec=CollectionHandler.mk_urlspec(
                 '/root', self.collection_factory))
 
+    def test_mk_urlspec(self):
+        urlspec = CollectionHandler.mk_urlspec(
+            '/root', self.collection_factory)
+        self.assertEqual(urlspec.handler_class, CollectionHandler)
+        self.assertEqual(urlspec.kwargs, {
+            "collection_factory": self.collection_factory,
+        })
+        self.assertEqual(urlspec.regex.pattern, '/root$')
+
     def test_initialize(self):
         handler = self.handler_helper.mk_handler()
         self.assertEqual(handler.collection_factory(handler), self.collection)
@@ -143,6 +152,15 @@ class TestElementHandler(TestCase):
         self.app_helper = AppHelper(
             urlspec=ElementHandler.mk_urlspec(
                 '/root', self.collection_factory))
+
+    def test_mk_urlspec(self):
+        urlspec = ElementHandler.mk_urlspec(
+            '/root', self.collection_factory)
+        self.assertEqual(urlspec.handler_class, ElementHandler)
+        self.assertEqual(urlspec.kwargs, {
+            "collection_factory": self.collection_factory,
+        })
+        self.assertEqual(urlspec.regex.pattern, '/root/(?P<elem_id>[^/]*)$')
 
     def test_initialize(self):
         handler = self.handler_helper.mk_handler()
