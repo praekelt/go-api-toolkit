@@ -216,12 +216,51 @@ class ElementHandler(BaseHandler):
         return d
 
 
+def owner_from_header(header):
+    """
+    Return a function that retrieves a collection owner id from
+    the specified HTTP header.
+
+    :param str header:
+       The name of the HTTP header. E.g. ``X-Owner-ID``.
+
+    Typically used to build a collection factory that accepts
+    an owner id instead of a :class:`RequestHandler`::
+    """
+    def owner_factory(handler):
+        return handler.request.headers[header]
+    return owner_factory
+
+
+def owner_from_path_kwarg(path_kwarg):
+    """
+    Return a function that retrieves a collection owner if from
+    the specified path argument.
+
+    :param str path_kwarg:
+        The name of the path argument. E.g. ``owner_id``.
+    """
+    def owner_factory(handler):
+        return handler.path_kwargs[path_kwarg]
+    return owner_factory
+
+
+def compose(f, g):
+    """
+    Compose two functions, ``f`` and ``g``.
+    """
+    def h(*args, **kw):
+        return f(g(*args, **kw))
+    return h
+
+
 class ApiApplication(Application):
     """
     An API for a set of collections and adhoc additional methods.
     """
 
     collections = ()
+    collection_factory_preprocessor = owner_from_header('X-Owner-ID')
 
     def __init__(self, **settings):
         routes = self._build_routes()
@@ -234,6 +273,9 @@ class ApiApplication(Application):
         """
         routes = []
         for dfn, collection_factory in self.collections:
+            if self.collection_factory_preprocessor is not None:
+                collection_factory = compose(
+                    collection_factory, self.collection_factory_preprocessor)
             routes.extend((
                 CollectionHandler.mk_urlspec(dfn, collection_factory),
                 ElementHandler.mk_urlspec(dfn, collection_factory),

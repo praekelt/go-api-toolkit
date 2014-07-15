@@ -207,6 +207,7 @@ class TestApiApplication(TestCase):
         app.collections = (
             ('/:owner_id/store', collection_factory),
         )
+        app.collection_factory_preprocessor = None
         [collection_route, elem_route] = app._build_routes()
         self.assertEqual(collection_route.handler_class, CollectionHandler)
         self.assertEqual(collection_route.regex.pattern,
