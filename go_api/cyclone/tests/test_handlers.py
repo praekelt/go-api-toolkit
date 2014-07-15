@@ -97,7 +97,7 @@ class TestCollectionHandler(TestCase):
             "obj2": {"id": "obj2"},
         }
         self.collection = InMemoryCollection(self.collection_data)
-        self.collection_factory = lambda: self.collection
+        self.collection_factory = lambda req: self.collection
         self.handler_helper = HandlerHelper(
             CollectionHandler,
             handler_kwargs={'collection_factory': self.collection_factory})
@@ -107,7 +107,7 @@ class TestCollectionHandler(TestCase):
 
     def test_initialize(self):
         handler = self.handler_helper.mk_handler()
-        self.assertEqual(handler.collection_factory(), self.collection)
+        self.assertEqual(handler.collection_factory(handler), self.collection)
 
     def test_prepare(self):
         handler = self.handler_helper.mk_handler()
@@ -136,7 +136,7 @@ class TestElementHandler(TestCase):
             "obj2": {"id": "obj2"},
         }
         self.collection = InMemoryCollection(self.collection_data)
-        self.collection_factory = lambda: self.collection
+        self.collection_factory = lambda req: self.collection
         self.handler_helper = HandlerHelper(
             ElementHandler,
             handler_kwargs={'collection_factory': self.collection_factory})
@@ -146,7 +146,7 @@ class TestElementHandler(TestCase):
 
     def test_initialize(self):
         handler = self.handler_helper.mk_handler()
-        self.assertEqual(handler.collection_factory(), self.collection)
+        self.assertEqual(handler.collection_factory(handler), self.collection)
 
     def test_prepare(self):
         handler = self.handler_helper.mk_handler()
