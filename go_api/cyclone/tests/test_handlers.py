@@ -9,7 +9,8 @@ from cyclone.web import HTTPError
 from go_api.collections import InMemoryCollection
 from go_api.cyclone.handlers import (
     BaseHandler, CollectionHandler, ElementHandler,
-    create_urlspec_regex, ApiApplication)
+    create_urlspec_regex, ApiApplication,
+    owner_from_header, owner_from_path_kwarg)
 from go_api.cyclone.helpers import HandlerHelper, AppHelper
 
 
@@ -201,7 +202,17 @@ class TestElementHandler(TestCase):
 
 
 class TestApiApplication(TestCase):
-    def test_build_routes(self):
+    def setUp(self):
+        # these helpers should never have their collection factories
+        # called in these tests
+        self.collection_helper = HandlerHelper(
+            CollectionHandler,
+            handler_kwargs={"collection_factory": None})
+        self.element_helper = HandlerHelper(
+            ElementHandler,
+            handler_kwargs={"collection_factory": None})
+
+    def test_build_routes_no_preprocesor(self):
         collection_factory = lambda **kw: "collection"
         app = ApiApplication()
         app.collections = (
@@ -221,3 +232,40 @@ class TestApiApplication(TestCase):
         self.assertEqual(elem_route.kwargs, {
             "collection_factory": collection_factory,
         })
+
+    def check_build_routes_with_preprocessor(self, preprocessor=None,
+                                             **handler_kw):
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app = ApiApplication()
+        app.collections = (
+            ('/:owner_id/store', collection_factory),
+        )
+        if preprocessor is not None:
+            app.collection_factory_preprocessor = preprocessor
+
+        [collection_route, elem_route] = app._build_routes()
+
+        handler = self.collection_helper.mk_handler(**handler_kw)
+        self.assertEqual(
+            collection_route.kwargs["collection_factory"](handler),
+            "collection-owner-1")
+
+        handler = self.element_helper.mk_handler(**handler_kw)
+        self.assertEqual(
+            elem_route.kwargs["collection_factory"](handler),
+            "collection-owner-1")
+
+    def test_build_routes_with_default_preprocessor(self):
+        return self.check_build_routes_with_preprocessor(
+            None,
+            headers={"X-Owner-ID": "owner-1"})
+
+    def test_build_routes_with_header_preprocessor(self):
+        return self.check_build_routes_with_preprocessor(
+            owner_from_header("X-Foo-ID"),
+            headers={"X-Foo-ID": "owner-1"})
+
+    def test_build_routes_with_path_kwargs_preprocessor(self):
+        return self.check_build_routes_with_preprocessor(
+            owner_from_path_kwarg("owner_id"),
+            path_kwargs={"owner_id": "owner-1"})

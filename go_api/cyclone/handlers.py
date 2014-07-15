@@ -260,7 +260,9 @@ class ApiApplication(Application):
     """
 
     collections = ()
-    collection_factory_preprocessor = owner_from_header('X-Owner-ID')
+
+    collection_factory_preprocessor = staticmethod(
+        owner_from_header('X-Owner-ID'))
 
     def __init__(self, **settings):
         routes = self._build_routes()

@@ -22,9 +22,10 @@ class _DummyRequest(object):
     """
     Extremely dummy request for use with :meth:`HandlerHelper.mk_handler`.
     """
-    def __init__(self):
+    def __init__(self, headers=None):
         self.supports_http_1_1 = lambda: True
         self.connection = _DummyConnection()
+        self.headers = headers or {}
 
 
 class HandlerHelper(object):
@@ -42,17 +43,20 @@ class HandlerHelper(object):
         self.handler_cls = handler_cls
         self.handler_kwargs = handler_kwargs or {}
 
-    def mk_handler(self):
+    def mk_handler(self, headers=None, path_args=None, path_kwargs=None):
         """
         Return a handler attached to a very stubby request object.
 
         Suitable for testing handler functionality that doesn't touch the
         request object itself.
         """
-        request = _DummyRequest()
+        request = _DummyRequest(headers=headers)
         app = Application([])
-        return self.handler_cls(
+        handler = self.handler_cls(
             app, request, **self.handler_kwargs)
+        handler.path_args = path_args
+        handler.path_kwargs = path_kwargs
+        return handler
 
 
 class AppHelper(object):
