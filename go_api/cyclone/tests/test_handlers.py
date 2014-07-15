@@ -207,13 +207,24 @@ class TestApiApplication(TestCase):
         # called in these tests
         self.collection_helper = HandlerHelper(
             CollectionHandler,
-            handler_kwargs={"collection_factory": None})
+            handler_kwargs={
+                "collection_factory": self.uncallable_collection_factory,
+            })
         self.element_helper = HandlerHelper(
             ElementHandler,
-            handler_kwargs={"collection_factory": None})
+            handler_kwargs={
+                "collection_factory": self.uncallable_collection_factory,
+            })
+
+    def uncallable_collection_factory(self, *args, **kw):
+        """
+        A collection_factory for use in tests that need one but should never
+        call it.
+        """
+        raise Exception("This collection_factory should never be called")
 
     def test_build_routes_no_preprocesor(self):
-        collection_factory = lambda **kw: "collection"
+        collection_factory = self.uncallable_collection_factory
         app = ApiApplication()
         app.collections = (
             ('/:owner_id/store', collection_factory),
