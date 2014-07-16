@@ -23,6 +23,9 @@ class ICollection(Interface):
         """
         Return a single object from the collection. May return a deferred
         instead of the object.
+
+        Should raise :class:`CollectionObjectNotFound`` if ``object_id`` refers
+        to an object that doesn't exist.
         """
 
     def create(object_id, data):
@@ -37,9 +40,17 @@ class ICollection(Interface):
         Update an object. May return a deferred.
 
         ``object_id`` may not be ``None``.
+
+        Should raise :class:`CollectionObjectNotFound`` if ``object_id`` refers
+        to an object that doesn't exist.
         """
 
     def delete(object_id):
         """
         Delete an object. May return a deferred.
+
+        ``object_id`` may not be ``None``.
+
+        Should raise :class:`CollectionObjectNotFound`` if ``object_id`` refers
+        to an object that doesn't exist.
         """
