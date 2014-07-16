@@ -222,6 +222,13 @@ class TestElementHandler(BaseHandlerTestCase):
             resp, 404, "Object u'missing1' not found.")
 
     @inlineCallbacks
+    def test_get_usage_error(self):
+        self.collection.get = raise_usage_error
+        resp = yield self.app_helper.get('/root/obj1')
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
+
+    @inlineCallbacks
     def test_put(self):
         self.assertEqual(self.collection_data["obj2"], {"id": "obj2"})
         data = yield self.app_helper.put(
@@ -236,10 +243,17 @@ class TestElementHandler(BaseHandlerTestCase):
     @inlineCallbacks
     def test_put_missing_object(self):
         resp = yield self.app_helper.put(
-            '/root/missing1',
-            data=json.dumps({"id": "missing1"}))
+            '/root/missing1', data=json.dumps({"id": "missing1"}))
         yield self.check_error_response(
             resp, 404, "Object u'missing1' not found.")
+
+    @inlineCallbacks
+    def test_put_usage_error(self):
+        self.collection.update = raise_usage_error
+        resp = yield self.app_helper.put(
+            '/root/obj1', data=json.dumps({"id": "obj2", "foo": "bar"}))
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
 
     @inlineCallbacks
     def test_delete(self):
@@ -254,6 +268,13 @@ class TestElementHandler(BaseHandlerTestCase):
         resp = yield self.app_helper.delete('/root/missing1')
         yield self.check_error_response(
             resp, 404, "Object u'missing1' not found.")
+
+    @inlineCallbacks
+    def test_delete_usage_error(self):
+        self.collection.delete = raise_usage_error
+        resp = yield self.app_helper.delete('/root/obj1')
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
 
 
 class TestApiApplication(TestCase):
