@@ -1,5 +1,5 @@
 """A toolkit for writing Vumi Go APIs"""
 
-__version__ = "0.1.0a"
+__version__ = "0.1.0"
 
 __all__ = []
