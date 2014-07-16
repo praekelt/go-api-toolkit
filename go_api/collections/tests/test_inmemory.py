@@ -7,7 +7,8 @@ from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred)
 from zope.interface.verify import verifyObject
 
-from go_api.collections.errors import CollectionObjectNotFound
+from go_api.collections.errors import (
+    CollectionObjectNotFound, CollectionObjectAlreadyExists)
 from go_api.collections.inmemory import InMemoryCollection
 from go_api.collections.interfaces import ICollection
 
@@ -133,6 +134,15 @@ class TestInMemoryCollection(TestCase):
         key = yield collection.create(None, {'foo': 'bar'})
         keys = yield collection.all_keys()
         self.assertEqual(keys, [key])
+        data = yield collection.get(key)
+        self.assertEqual(data, {'foo': 'bar', 'id': key})
+
+    @inlineCallbacks
+    def test_create_existing_id(self):
+        collection = InMemoryCollection()
+        key = yield collection.create(None, {'foo': 'bar'})
+        d = collection.create(key, {'baz': 'boo'})
+        yield self.failUnlessFailure(d, CollectionObjectAlreadyExists)
         data = yield collection.get(key)
         self.assertEqual(data, {'foo': 'bar', 'id': key})
 
