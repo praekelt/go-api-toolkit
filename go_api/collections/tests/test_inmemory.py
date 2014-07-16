@@ -180,3 +180,11 @@ class TestInMemoryCollection(TestCase):
         self.assertEqual(data, {'id': key, 'foo': 'bar'})
         data = yield collection.get(key)
         self.assertEqual(data, {'id': key, 'foo': 'bar'})
+
+    @inlineCallbacks
+    def test_collection_update_missing_row(self):
+        collection = InMemoryCollection()
+        d = collection.update('foo', {})
+        yield self.failUnlessFailure(d, CollectionObjectNotFound)
+        keys = yield collection.all_keys()
+        self.assertEqual(keys, [])
