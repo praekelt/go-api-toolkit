@@ -201,12 +201,34 @@ class TestElementHandler(TestCase):
             {"id": "obj2", "foo": "bar"})
 
     @inlineCallbacks
+    def test_put_missing_object(self):
+        resp = yield self.app_helper.put(
+            '/root/missing1',
+            data=json.dumps({"id": "missing1"}))
+        self.assertEqual(resp.code, 404)
+        error_data = yield resp.json()
+        self.assertEqual(error_data, {
+            "status_code": 404,
+            "reason": "Object u'missing1' not found.",
+        })
+
+    @inlineCallbacks
     def test_delete(self):
         self.assertTrue("obj1" in self.collection_data)
         data = yield self.app_helper.delete(
             '/root/obj1', parser='json')
         self.assertEqual(data, {"success": True})
         self.assertTrue("obj1" not in self.collection_data)
+
+    @inlineCallbacks
+    def test_delete_missing_object(self):
+        resp = yield self.app_helper.delete('/root/missing1')
+        self.assertEqual(resp.code, 404)
+        error_data = yield resp.json()
+        self.assertEqual(error_data, {
+            "status_code": 404,
+            "reason": "Object u'missing1' not found.",
+        })
 
 
 class TestApiApplication(TestCase):
