@@ -22,3 +22,16 @@ class CollectionObjectNotFound(CollectionUsageError):
     Raised by an ICollection when it is asked to get, update or delete an
     object that doesn't exist.
     """
+    def __init__(self, object_id, object_type=u"Object"):
+        CollectionUsageError.__init__(
+            self, u"%s %r not found." % (object_type, object_id))
+
+
+class CollectionObjectAlreadyExists(CollectionUsageError):
+    """
+    Raised by an ICollection when it is asked to get, update or delete an
+    object that doesn't exist.
+    """
+    def __init__(self, object_id, object_type=u"Object"):
+        CollectionUsageError.__init__(
+            self, u"%s %r already exists." % (object_type, object_id))
