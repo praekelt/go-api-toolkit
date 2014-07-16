@@ -21,6 +21,24 @@ def defer_async(value, reactor=None):
     return d
 
 
+def simulate_async(f, reactor=None):
+    """
+    Decorator to use on synchronous methods to convert their
+    result to an asynchronous deferred that fires after the
+    reactor has been given a chance to run.
+    """
+    if reactor is None:
+        from twisted.internet import reactor
+
+    def async_f(*args, **kw):
+        d = maybeDeferred(f, *args, **kw)
+        async_d = Deferred()
+        reactor.callLater(0, lambda: d.chainDeferred(async_d))
+        return async_d
+
+    return async_f
+
+
 def ensure_deferred(x):
     """
     Ensure that a value is wrapped in a deferred.
