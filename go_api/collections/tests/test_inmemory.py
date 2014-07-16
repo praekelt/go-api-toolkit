@@ -7,6 +7,7 @@ from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred)
 from zope.interface.verify import verifyObject
 
+from go_api.collections.errors import CollectionObjectNotFound
 from go_api.collections.inmemory import InMemoryCollection
 from go_api.collections.interfaces import ICollection
 
@@ -138,9 +139,8 @@ class TestInMemoryCollection(TestCase):
     @inlineCallbacks
     def test_delete_missing_row(self):
         collection = InMemoryCollection()
-
-        data = yield collection.delete('foo')
-        self.assertEqual(data, None)
+        d = collection.delete('foo')
+        yield self.failUnlessFailure(d, CollectionObjectNotFound)
         keys = yield collection.all_keys()
         self.assertEqual(keys, [])
 
