@@ -37,10 +37,3 @@ def simulate_async(f, reactor=None):
         return async_d
 
     return async_f
-
-
-def ensure_deferred(x):
-    """
-    Ensure that a value is wrapped in a deferred.
-    """
-    return maybeDeferred(lambda x: x, x)
