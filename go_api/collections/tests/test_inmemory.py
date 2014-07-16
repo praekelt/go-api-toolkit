@@ -105,6 +105,22 @@ class TestInMemoryCollection(TestCase):
         self.assertEqual(all_data, [data])
 
     @inlineCallbacks
+    def test_get(self):
+        collection = InMemoryCollection()
+        key = yield collection.create(None, {"some": "data"})
+        data = yield collection.get(key)
+        self.assertEqual(data, {
+            "id": key,
+            "some": "data",
+        })
+
+    @inlineCallbacks
+    def test_get_missing_object(self):
+        collection = InMemoryCollection()
+        d = collection.get("missing")
+        yield self.failUnlessFailure(d, CollectionObjectNotFound)
+
+    @inlineCallbacks
     def test_create_no_id_no_data(self):
         """
         Creating an object with no object_id should generate one.
