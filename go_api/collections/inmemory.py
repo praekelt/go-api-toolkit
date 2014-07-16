@@ -8,6 +8,9 @@ from uuid import uuid4
 from zope.interface import implementer
 
 from .interfaces import ICollection
+from .errors import (
+    CollectionObjectNotFound, CollectionObjectAlreadyExists,
+    CollectionUsageError)
 from ..utils import simulate_async
 
 
@@ -69,26 +72,32 @@ class InMemoryCollection(object):
 
     @simulate_async
     def get(self, object_id):
-        return self._get_data(object_id)
+        data = self._get_data(object_id)
+        if data is None:
+            raise CollectionObjectNotFound(object_id)
+        return data
 
     @simulate_async
     def create(self, object_id, data):
-        assert 'id' not in data  # TODO: Something better than assert.
         if object_id is None:
             object_id = uuid4().hex
+        if self._get_data(object_id) is not None:
+            raise CollectionObjectAlreadyExists(object_id)
         self._set_data(object_id, data)
         return object_id
 
     @simulate_async
     def update(self, object_id, data):
-        assert object_id is not None  # TODO: Something better than assert.
-        assert self._id_to_key(object_id) in self._data
+        if not self._id_to_key(object_id) in self._data:
+            raise CollectionObjectNotFound(object_id)
         self._set_data(object_id, data)
         return self._get_data(object_id)
 
     @simulate_async
     def delete(self, object_id):
         data = self._get_data(object_id)
+        if data is None:
+            raise CollectionObjectNotFound(object_id)
         self._data.pop(self._id_to_key(object_id), None)
         return data
 
