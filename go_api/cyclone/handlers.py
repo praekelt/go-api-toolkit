@@ -101,7 +101,22 @@ class CollectionHandler(BaseHandler):
 
     @classmethod
     def mk_urlspec(cls, dfn, collection_factory):
-        # TODO: docstring
+        """
+        Constructs a :class:`URLSpec` from a path definition and
+        a collection factory. The returned :class:`URLSpec` routes
+        the constructed path to a :class:`CollectionHandler` with the
+        given ``collection_factory``.
+
+        :param str dfn:
+            A path definition suitbale for passing to
+            :func:`create_urlspec_regex`. Any path arguments will
+            appear in ``handler.path_kwargs`` on the ``handler`` passed
+            to the ``collection_factory``.
+        :param func collection_factory:
+            A function that takes a :class:`RequestHandler` instance and
+            returns an :class:`ICollection`. The collection_factory is
+            called during ``RequestHandler.prepare``.
+        """
         return URLSpec(create_urlspec_regex(dfn), cls,
                        kwargs={"collection_factory": collection_factory})
 
@@ -109,13 +124,7 @@ class CollectionHandler(BaseHandler):
         self.collection_factory = collection_factory
 
     def prepare(self):
-        kw = self.path_kwargs
-        if kw is None:
-            kw = {}
-        # TODO: extract owner_id from headers and add to kwargs?
-        #       Would prefer to somehow make more generic information
-        #       Available to the collection factory
-        self.collection = self.collection_factory(**kw)
+        self.collection = self.collection_factory(self)
 
     def get(self, *args, **kw):
         """
@@ -150,6 +159,22 @@ class ElementHandler(BaseHandler):
 
     @classmethod
     def mk_urlspec(cls, dfn, collection_factory):
+        """
+        Constructs a :class:`URLSpec` from a path definition and
+        a collection factory. The returned :class:`URLSpec` routes
+        the constructed path, with an ``elem_id`` path suffix appended,
+        to an :class:`ElementHandler` with the given ``collection_factory``.
+
+        :param str dfn:
+            A path definition suitbale for passing to
+            :func:`create_urlspec_regex`. Any path arguments will
+            appear in ``handler.path_kwargs`` on the ``handler`` passed
+            to the ``collection_factory``.
+        :param func collection_factory:
+            A function that takes a :class:`RequestHandler` instance and
+            returns an :class:`ICollection`. The collection_factory is
+            called during ``RequestHandler.prepare``.
+        """
         return URLSpec(create_urlspec_regex(dfn + '/:elem_id'), cls,
                        kwargs={"collection_factory": collection_factory})
 
@@ -157,9 +182,8 @@ class ElementHandler(BaseHandler):
         self.collection_factory = collection_factory
 
     def prepare(self):
-        kw = self.path_kwargs.copy()
-        self.elem_id = kw.pop('elem_id')
-        self.collection = self.collection_factory(**kw)
+        self.elem_id = self.path_kwargs['elem_id']
+        self.collection = self.collection_factory(self)
 
     def get(self, *args, **kw):
         """
@@ -192,12 +216,53 @@ class ElementHandler(BaseHandler):
         return d
 
 
+def owner_from_header(header):
+    """
+    Return a function that retrieves a collection owner id from
+    the specified HTTP header.
+
+    :param str header:
+       The name of the HTTP header. E.g. ``X-Owner-ID``.
+
+    Typically used to build a collection factory that accepts
+    an owner id instead of a :class:`RequestHandler`::
+    """
+    def owner_factory(handler):
+        return handler.request.headers[header]
+    return owner_factory
+
+
+def owner_from_path_kwarg(path_kwarg):
+    """
+    Return a function that retrieves a collection owner if from
+    the specified path argument.
+
+    :param str path_kwarg:
+        The name of the path argument. E.g. ``owner_id``.
+    """
+    def owner_factory(handler):
+        return handler.path_kwargs[path_kwarg]
+    return owner_factory
+
+
+def compose(f, g):
+    """
+    Compose two functions, ``f`` and ``g``.
+    """
+    def h(*args, **kw):
+        return f(g(*args, **kw))
+    return h
+
+
 class ApiApplication(Application):
     """
     An API for a set of collections and adhoc additional methods.
     """
 
     collections = ()
+
+    collection_factory_preprocessor = staticmethod(
+        owner_from_header('X-Owner-ID'))
 
     def __init__(self, **settings):
         routes = self._build_routes()
@@ -210,6 +275,9 @@ class ApiApplication(Application):
         """
         routes = []
         for dfn, collection_factory in self.collections:
+            if self.collection_factory_preprocessor is not None:
+                collection_factory = compose(
+                    collection_factory, self.collection_factory_preprocessor)
             routes.extend((
                 CollectionHandler.mk_urlspec(dfn, collection_factory),
                 ElementHandler.mk_urlspec(dfn, collection_factory),

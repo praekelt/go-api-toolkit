@@ -9,7 +9,8 @@ from cyclone.web import HTTPError
 from go_api.collections import InMemoryCollection
 from go_api.cyclone.handlers import (
     BaseHandler, CollectionHandler, ElementHandler,
-    create_urlspec_regex, ApiApplication)
+    create_urlspec_regex, ApiApplication,
+    owner_from_header, owner_from_path_kwarg)
 from go_api.cyclone.helpers import HandlerHelper, AppHelper
 
 
@@ -97,7 +98,7 @@ class TestCollectionHandler(TestCase):
             "obj2": {"id": "obj2"},
         }
         self.collection = InMemoryCollection(self.collection_data)
-        self.collection_factory = lambda: self.collection
+        self.collection_factory = lambda req: self.collection
         self.handler_helper = HandlerHelper(
             CollectionHandler,
             handler_kwargs={'collection_factory': self.collection_factory})
@@ -105,9 +106,18 @@ class TestCollectionHandler(TestCase):
             urlspec=CollectionHandler.mk_urlspec(
                 '/root', self.collection_factory))
 
+    def test_mk_urlspec(self):
+        urlspec = CollectionHandler.mk_urlspec(
+            '/root', self.collection_factory)
+        self.assertEqual(urlspec.handler_class, CollectionHandler)
+        self.assertEqual(urlspec.kwargs, {
+            "collection_factory": self.collection_factory,
+        })
+        self.assertEqual(urlspec.regex.pattern, '/root$')
+
     def test_initialize(self):
         handler = self.handler_helper.mk_handler()
-        self.assertEqual(handler.collection_factory(), self.collection)
+        self.assertEqual(handler.collection_factory(handler), self.collection)
 
     def test_prepare(self):
         handler = self.handler_helper.mk_handler()
@@ -136,7 +146,7 @@ class TestElementHandler(TestCase):
             "obj2": {"id": "obj2"},
         }
         self.collection = InMemoryCollection(self.collection_data)
-        self.collection_factory = lambda: self.collection
+        self.collection_factory = lambda req: self.collection
         self.handler_helper = HandlerHelper(
             ElementHandler,
             handler_kwargs={'collection_factory': self.collection_factory})
@@ -144,9 +154,18 @@ class TestElementHandler(TestCase):
             urlspec=ElementHandler.mk_urlspec(
                 '/root', self.collection_factory))
 
+    def test_mk_urlspec(self):
+        urlspec = ElementHandler.mk_urlspec(
+            '/root', self.collection_factory)
+        self.assertEqual(urlspec.handler_class, ElementHandler)
+        self.assertEqual(urlspec.kwargs, {
+            "collection_factory": self.collection_factory,
+        })
+        self.assertEqual(urlspec.regex.pattern, '/root/(?P<elem_id>[^/]*)$')
+
     def test_initialize(self):
         handler = self.handler_helper.mk_handler()
-        self.assertEqual(handler.collection_factory(), self.collection)
+        self.assertEqual(handler.collection_factory(handler), self.collection)
 
     def test_prepare(self):
         handler = self.handler_helper.mk_handler()
@@ -183,12 +202,34 @@ class TestElementHandler(TestCase):
 
 
 class TestApiApplication(TestCase):
-    def test_build_routes(self):
-        collection_factory = lambda **kw: "collection"
+    def setUp(self):
+        # these helpers should never have their collection factories
+        # called in these tests
+        self.collection_helper = HandlerHelper(
+            CollectionHandler,
+            handler_kwargs={
+                "collection_factory": self.uncallable_collection_factory,
+            })
+        self.element_helper = HandlerHelper(
+            ElementHandler,
+            handler_kwargs={
+                "collection_factory": self.uncallable_collection_factory,
+            })
+
+    def uncallable_collection_factory(self, *args, **kw):
+        """
+        A collection_factory for use in tests that need one but should never
+        call it.
+        """
+        raise Exception("This collection_factory should never be called")
+
+    def test_build_routes_no_preprocesor(self):
+        collection_factory = self.uncallable_collection_factory
         app = ApiApplication()
         app.collections = (
             ('/:owner_id/store', collection_factory),
         )
+        app.collection_factory_preprocessor = None
         [collection_route, elem_route] = app._build_routes()
         self.assertEqual(collection_route.handler_class, CollectionHandler)
         self.assertEqual(collection_route.regex.pattern,
@@ -202,3 +243,40 @@ class TestApiApplication(TestCase):
         self.assertEqual(elem_route.kwargs, {
             "collection_factory": collection_factory,
         })
+
+    def check_build_routes_with_preprocessor(self, preprocessor=None,
+                                             **handler_kw):
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app = ApiApplication()
+        app.collections = (
+            ('/:owner_id/store', collection_factory),
+        )
+        if preprocessor is not None:
+            app.collection_factory_preprocessor = preprocessor
+
+        [collection_route, elem_route] = app._build_routes()
+
+        handler = self.collection_helper.mk_handler(**handler_kw)
+        self.assertEqual(
+            collection_route.kwargs["collection_factory"](handler),
+            "collection-owner-1")
+
+        handler = self.element_helper.mk_handler(**handler_kw)
+        self.assertEqual(
+            elem_route.kwargs["collection_factory"](handler),
+            "collection-owner-1")
+
+    def test_build_routes_with_default_preprocessor(self):
+        return self.check_build_routes_with_preprocessor(
+            None,
+            headers={"X-Owner-ID": "owner-1"})
+
+    def test_build_routes_with_header_preprocessor(self):
+        return self.check_build_routes_with_preprocessor(
+            owner_from_header("X-Foo-ID"),
+            headers={"X-Foo-ID": "owner-1"})
+
+    def test_build_routes_with_path_kwargs_preprocessor(self):
+        return self.check_build_routes_with_preprocessor(
+            owner_from_path_kwarg("owner_id"),
+            path_kwargs={"owner_id": "owner-1"})
