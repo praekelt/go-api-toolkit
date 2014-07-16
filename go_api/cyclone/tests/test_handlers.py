@@ -89,8 +89,6 @@ class TestBaseHandler(TestCase):
         ])
 
 
-# TODO: Test error handling
-
 class TestCollectionHandler(TestCase):
     def setUp(self):
         self.collection_data = {
@@ -179,6 +177,11 @@ class TestElementHandler(TestCase):
         data = yield self.app_helper.get(
             '/root/obj1', parser='json')
         self.assertEqual(data, {"id": "obj1"})
+
+    @inlineCallbacks
+    def test_get_missing_object(self):
+        resp = yield self.app_helper.get('/root/missing1')
+        self.assertEqual(resp.code, 404)
 
     @inlineCallbacks
     def test_put(self):

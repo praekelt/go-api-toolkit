@@ -9,6 +9,7 @@ from twisted.python import log
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 
 from ..utils import ensure_deferred
+from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
 def create_urlspec_regex(dfn, *args, **kw):
@@ -42,7 +43,8 @@ class BaseHandler(RequestHandler):
 
     def raise_err(self, failure, status_code, reason):
         """
-        Log the failure and raise a suitable :class:`HTTPError`.
+        Catch any error, log the failure and raise a suitable
+        :class:`HTTPError`.
 
         :type failure: twisted.python.failure.Failure
         :param failure:
@@ -52,9 +54,30 @@ class BaseHandler(RequestHandler):
         :param str reason:
             HTTP reason to return along with the status.
         """
+        if failure.check(HTTPError):
+            # re-raise any existing HTTPErrors
+            failure.raiseException()
         log.err(failure)
-        # TODO: write out a JSON error response.
         raise HTTPError(status_code, reason=reason)
+
+    def catch_err(self, failure, status_code, expected_error):
+        """
+        Catch a specific error and re-raise it as a suitable
+        :class:`HTTPError`. Do not log it.
+
+        :type failure: twisted.python.failure.Failure
+        :param failure:
+            failure that caused the error.
+        :type expected_error: subclass of :class:`Exception`
+        :param expected_error:
+            The exception class to trap.
+        :param int status_code:
+            HTTP status code to return.
+        """
+        failure.trap(expected_error)
+        raise HTTPError(status_code, reason=str(failure.value))
+
+    # TODO: write out a JSON error response by overriding .write_error
 
     def write_object(self, obj):
         """
@@ -131,7 +154,8 @@ class CollectionHandler(BaseHandler):
         Return all elements from a collection.
         """
         d = self.write_objects(self.collection.all())
-        d.addErrback(self.raise_err, 500, "Failed to retrieve object.")
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
+        d.addErrback(self.raise_err, 500, "Failed to retrieve objects.")
         return d
 
     def post(self, *args, **kw):
@@ -142,6 +166,7 @@ class CollectionHandler(BaseHandler):
         d = self.collection.create(None, data)
         # TODO: better output once .create returns better things
         d.addCallback(lambda object_id: self.write_object({"id": object_id}))
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500, "Failed to create object.")
         return d
 
@@ -189,7 +214,10 @@ class ElementHandler(BaseHandler):
         """
         Retrieve an element within a collection.
         """
-        d = self.write_object(self.collection.get(self.elem_id))
+        d = self.collection.get(self.elem_id)
+        d.addCallback(self.write_object)
+        d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
                      "Failed to retrieve %r" % (self.elem_id,))
         return d
@@ -201,6 +229,8 @@ class ElementHandler(BaseHandler):
         data = json.loads(self.request.body)
         d = self.collection.update(self.elem_id, data)
         d.addCallback(lambda r: self.write_object({"success": True}))
+        d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
                      "Failed to update %r" % (self.elem_id,))
         return d
@@ -211,6 +241,8 @@ class ElementHandler(BaseHandler):
         """
         d = self.collection.delete(self.elem_id)
         d.addCallback(lambda r: self.write_object({"success": True}))
+        d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
                      "Failed to delete %r" % (self.elem_id,))
         return d
