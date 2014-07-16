@@ -4,12 +4,11 @@
 import json
 import traceback
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python import log
 
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 
-from ..utils import ensure_deferred
 from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
@@ -101,11 +100,7 @@ class BaseHandler(RequestHandler):
         :param dict obj:
             JSON serializable object to write out.
         """
-        d = ensure_deferred(obj)
-        d.addCallback(json.dumps)
-        d.addCallback(self.write)
-        d.addErrback(self.raise_err, 500, "Failed to write object")
-        return d
+        self.write(json.dumps(obj))
 
     @inlineCallbacks
     def write_objects(self, objs):
@@ -115,7 +110,6 @@ class BaseHandler(RequestHandler):
         :param list objs:
             List of dictionaries to write out.
         """
-        objs = yield objs
         for obj_deferred in objs:
             obj = yield obj_deferred
             if obj is None:
@@ -168,7 +162,8 @@ class CollectionHandler(BaseHandler):
         """
         Return all elements from a collection.
         """
-        d = self.write_objects(self.collection.all())
+        d = maybeDeferred(self.collection.all)
+        d.addCallback(self.write_objects)
         d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500, "Failed to retrieve objects.")
         return d
@@ -178,7 +173,7 @@ class CollectionHandler(BaseHandler):
         Create an element witin a collection.
         """
         data = json.loads(self.request.body)
-        d = self.collection.create(None, data)
+        d = maybeDeferred(self.collection.create, None, data)
         # TODO: better output once .create returns better things
         d.addCallback(lambda object_id: self.write_object({"id": object_id}))
         d.addErrback(self.catch_err, 400, CollectionUsageError)
@@ -229,7 +224,7 @@ class ElementHandler(BaseHandler):
         """
         Retrieve an element within a collection.
         """
-        d = self.collection.get(self.elem_id)
+        d = maybeDeferred(self.collection.get, self.elem_id)
         d.addCallback(self.write_object)
         d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
         d.addErrback(self.catch_err, 400, CollectionUsageError)
@@ -242,8 +237,8 @@ class ElementHandler(BaseHandler):
         Update an element within a collection.
         """
         data = json.loads(self.request.body)
-        d = self.collection.update(self.elem_id, data)
-        d.addCallback(lambda r: self.write_object({"success": True}))
+        d = maybeDeferred(self.collection.update, self.elem_id, data)
+        d.addCallback(self.write_object)
         d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
         d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
@@ -254,8 +249,8 @@ class ElementHandler(BaseHandler):
         """
         Delete an element from within a collection.
         """
-        d = self.collection.delete(self.elem_id)
-        d.addCallback(lambda r: self.write_object({"success": True}))
+        d = maybeDeferred(self.collection.delete, self.elem_id)
+        d.addCallback(self.write_object)
         d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
         d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
