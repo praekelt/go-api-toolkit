@@ -182,6 +182,11 @@ class TestElementHandler(TestCase):
     def test_get_missing_object(self):
         resp = yield self.app_helper.get('/root/missing1')
         self.assertEqual(resp.code, 404)
+        error_data = yield resp.json()
+        self.assertEqual(error_data, {
+            "status_code": 404,
+            "reason": "Object u'missing1' not found.",
+        })
 
     @inlineCallbacks
     def test_put(self):

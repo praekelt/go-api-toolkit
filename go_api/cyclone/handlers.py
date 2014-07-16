@@ -2,6 +2,7 @@
 """
 
 import json
+import traceback
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -77,7 +78,21 @@ class BaseHandler(RequestHandler):
         failure.trap(expected_error)
         raise HTTPError(status_code, reason=str(failure.value))
 
-    # TODO: write out a JSON error response by overriding .write_error
+    def write_error(self, status_code, **kw):
+        """
+        Overrides :class:`RequestHandler`'s ``.write_error`` to format
+        errors as JSON dictionaries.
+        """
+        error_data = {
+            "status_code": status_code,
+            "reason": str(kw.get("exception", self._reason)),
+        }
+        if self.settings.get("debug") and "exc_info" in kw:
+            # in debug mode, try to send a traceback
+            error_data["traceback"] = traceback.format_exception(
+                *kw["exc_info"])
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
+        self.finish(json.dumps(error_data))
 
     def write_object(self, obj):
         """
