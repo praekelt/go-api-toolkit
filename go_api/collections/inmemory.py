@@ -48,7 +48,6 @@ class InMemoryCollection(object):
         return True
 
     def _set_data(self, object_id, data):
-        # TODO: Get 'id' out of object data.
         row_data = deepcopy(data)
         row_data['id'] = object_id
         self._data[self._id_to_key(object_id)] = row_data
