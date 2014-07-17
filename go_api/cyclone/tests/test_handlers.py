@@ -74,6 +74,17 @@ class TestBaseHandler(TestCase):
         [err] = self.flushLoggedErrors(DummyError)
         self.assertEqual(err, f)
 
+    def test_catch_err(self):
+        handler = self.handler_helper.mk_handler()
+        f = Failure(DummyError("Moop"))
+        try:
+            handler.catch_err(f, 400, DummyError)
+        except HTTPError, err:
+            pass
+        self.assertEqual(err.status_code, 400)
+        self.assertEqual(err.reason, "Moop")
+        self.assertEqual(self.flushLoggedErrors(DummyError), [])
+
     @inlineCallbacks
     def test_write_object(self):
         writes = []
