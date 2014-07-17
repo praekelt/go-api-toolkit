@@ -2,7 +2,7 @@
 Tests for go_api utility functions.
 """
 
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
 from twisted.trial.unittest import TestCase
 
@@ -44,6 +44,16 @@ class TestSimulateAsync(TestCase):
         def simple():
             return 'foo'
         f = simulate_async(simple)
+        d = f()
+        self.assertTrue(isinstance(d, Deferred))
+        v = yield d
+        self.assertEqual(v, 'foo')
+
+    @inlineCallbacks
+    def test_handler_deferred_return(self):
+        def simple_deferred():
+            return succeed('foo')
+        f = simulate_async(simple_deferred)
         d = f()
         self.assertTrue(isinstance(d, Deferred))
         v = yield d
