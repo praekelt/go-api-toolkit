@@ -7,6 +7,7 @@ from twisted.internet.defer import inlineCallbacks
 from cyclone.web import HTTPError
 
 from go_api.collections import InMemoryCollection
+from go_api.collections.errors import CollectionUsageError
 from go_api.cyclone.handlers import (
     BaseHandler, CollectionHandler, ElementHandler,
     create_urlspec_regex, ApiApplication,
@@ -18,6 +19,22 @@ class DummyError(Exception):
     """
     Exception for use in tests.
     """
+
+
+def raise_usage_error(*args, **kw):
+    """
+    Function that raises a generic :class:`CollectionUsageError`. For use in
+    testing error paths.
+    """
+    raise CollectionUsageError("Do not push the red button")
+
+
+def raise_dummy_error(*args, **kw):
+    """
+    Function that raises a :class:`DummyError`. For use in testing errors
+    paths.
+    """
+    raise DummyError("You pushed the red button")
 
 
 class TestCreateUrlspecRegex(TestCase):
@@ -65,6 +82,38 @@ class TestBaseHandler(TestCase):
         [err] = self.flushLoggedErrors(DummyError)
         self.assertEqual(err, f)
 
+    def test_raise_err_reraises_httperrors(self):
+        handler = self.handler_helper.mk_handler()
+        f = Failure(HTTPError(300, reason="Sparta!"))
+        try:
+            handler.raise_err(f, 500, "Eep")
+        except HTTPError, err:
+            pass
+        self.assertEqual(err.status_code, 300)
+        self.assertEqual(err.reason, "Sparta!")
+        self.assertEqual(self.flushLoggedErrors(HTTPError), [])
+
+    def test_catch_err(self):
+        handler = self.handler_helper.mk_handler()
+        f = Failure(DummyError("Moop"))
+        try:
+            handler.catch_err(f, 400, DummyError)
+        except HTTPError, err:
+            pass
+        self.assertEqual(err.status_code, 400)
+        self.assertEqual(err.reason, "Moop")
+        self.assertEqual(self.flushLoggedErrors(DummyError), [])
+
+    def test_catch_err_reraises_other_errors(self):
+        handler = self.handler_helper.mk_handler()
+        f = Failure(DummyError("Moop"))
+        try:
+            handler.catch_err(f, 500, HTTPError)
+        except DummyError, err:
+            pass
+        self.assertEqual(str(err), "Moop")
+        self.assertEqual(self.flushLoggedErrors(DummyError), [])
+
     @inlineCallbacks
     def test_write_object(self):
         writes = []
@@ -89,9 +138,20 @@ class TestBaseHandler(TestCase):
         ])
 
 
-# TODO: Test error handling
+class BaseHandlerTestCase(TestCase):
+    @inlineCallbacks
+    def check_error_response(self, resp, status_code, reason, **kw):
+        self.assertEqual(resp.code, status_code)
+        error_data = yield resp.json()
+        expected = {
+            "status_code": status_code,
+            "reason": reason,
+        }
+        expected.update(kw)
+        self.assertEqual(error_data, expected)
 
-class TestCollectionHandler(TestCase):
+
+class TestCollectionHandler(BaseHandlerTestCase):
     def setUp(self):
         self.collection_data = {
             "obj1": {"id": "obj1"},
@@ -130,6 +190,22 @@ class TestCollectionHandler(TestCase):
         self.assertEqual(data, [{"id": "obj1"}, {"id": "obj2"}])
 
     @inlineCallbacks
+    def test_get_usage_error(self):
+        self.collection.all = raise_usage_error
+        resp = yield self.app_helper.get('/root')
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
+
+    @inlineCallbacks
+    def test_get_server_error(self):
+        self.collection.all = raise_dummy_error
+        resp = yield self.app_helper.get('/root')
+        yield self.check_error_response(
+            resp, 500, "Failed to retrieve objects.")
+        [f] = self.flushLoggedErrors(DummyError)
+        self.assertEqual(str(f.value), "You pushed the red button")
+
+    @inlineCallbacks
     def test_post(self):
         data = yield self.app_helper.post(
             '/root', data=json.dumps({"foo": "bar"}), parser='json')
@@ -138,8 +214,26 @@ class TestCollectionHandler(TestCase):
             self.collection_data[data["id"]],
             {"foo": "bar", "id": data["id"]})
 
+    @inlineCallbacks
+    def test_post_usage_error(self):
+        self.collection.create = raise_usage_error
+        resp = yield self.app_helper.post(
+            '/root', data=json.dumps({"foo": "bar"}))
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
 
-class TestElementHandler(TestCase):
+    @inlineCallbacks
+    def test_post_server_error(self):
+        self.collection.create = raise_dummy_error
+        resp = yield self.app_helper.post(
+            '/root', data=json.dumps({"foo": "bar"}))
+        yield self.check_error_response(
+            resp, 500, "Failed to create object.")
+        [f] = self.flushLoggedErrors(DummyError)
+        self.assertEqual(str(f.value), "You pushed the red button")
+
+
+class TestElementHandler(BaseHandlerTestCase):
     def setUp(self):
         self.collection_data = {
             "obj1": {"id": "obj1"},
@@ -181,24 +275,93 @@ class TestElementHandler(TestCase):
         self.assertEqual(data, {"id": "obj1"})
 
     @inlineCallbacks
+    def test_get_missing_object(self):
+        resp = yield self.app_helper.get('/root/missing1')
+        yield self.check_error_response(
+            resp, 404, "Object u'missing1' not found.")
+
+    @inlineCallbacks
+    def test_get_usage_error(self):
+        self.collection.get = raise_usage_error
+        resp = yield self.app_helper.get('/root/obj1')
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
+
+    @inlineCallbacks
+    def test_get_server_error(self):
+        self.collection.get = raise_dummy_error
+        resp = yield self.app_helper.get('/root/obj1')
+        yield self.check_error_response(
+            resp, 500, "Failed to retrieve u'obj1'")
+        [f] = self.flushLoggedErrors(DummyError)
+        self.assertEqual(str(f.value), "You pushed the red button")
+
+    @inlineCallbacks
     def test_put(self):
         self.assertEqual(self.collection_data["obj2"], {"id": "obj2"})
         data = yield self.app_helper.put(
             '/root/obj2',
             data=json.dumps({"id": "obj2", "foo": "bar"}),
             parser='json')
-        self.assertEqual(data, {"success": True})
+        self.assertEqual(data, {"id": "obj2", "foo": "bar"})
         self.assertEqual(
             self.collection_data["obj2"],
             {"id": "obj2", "foo": "bar"})
+
+    @inlineCallbacks
+    def test_put_missing_object(self):
+        resp = yield self.app_helper.put(
+            '/root/missing1', data=json.dumps({"id": "missing1"}))
+        yield self.check_error_response(
+            resp, 404, "Object u'missing1' not found.")
+
+    @inlineCallbacks
+    def test_put_usage_error(self):
+        self.collection.update = raise_usage_error
+        resp = yield self.app_helper.put(
+            '/root/obj1', data=json.dumps({"id": "obj2", "foo": "bar"}))
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
+
+    @inlineCallbacks
+    def test_put_server_error(self):
+        self.collection.update = raise_dummy_error
+        resp = yield self.app_helper.put(
+            '/root/obj2', data=json.dumps({"id": "obj2", "foo": "bar"}))
+        yield self.check_error_response(
+            resp, 500, "Failed to update u'obj2'")
+        [f] = self.flushLoggedErrors(DummyError)
+        self.assertEqual(str(f.value), "You pushed the red button")
 
     @inlineCallbacks
     def test_delete(self):
         self.assertTrue("obj1" in self.collection_data)
         data = yield self.app_helper.delete(
             '/root/obj1', parser='json')
-        self.assertEqual(data, {"success": True})
+        self.assertEqual(data, {"id": "obj1"})
         self.assertTrue("obj1" not in self.collection_data)
+
+    @inlineCallbacks
+    def test_delete_missing_object(self):
+        resp = yield self.app_helper.delete('/root/missing1')
+        yield self.check_error_response(
+            resp, 404, "Object u'missing1' not found.")
+
+    @inlineCallbacks
+    def test_delete_usage_error(self):
+        self.collection.delete = raise_usage_error
+        resp = yield self.app_helper.delete('/root/obj1')
+        yield self.check_error_response(
+            resp, 400, "Do not push the red button")
+
+    @inlineCallbacks
+    def test_delete_server_error(self):
+        self.collection.delete = raise_dummy_error
+        resp = yield self.app_helper.delete('/root/obj1')
+        yield self.check_error_response(
+            resp, 500, "Failed to delete u'obj1'")
+        [f] = self.flushLoggedErrors(DummyError)
+        self.assertEqual(str(f.value), "You pushed the red button")
 
 
 class TestApiApplication(TestCase):
