@@ -30,6 +30,15 @@ class TestDeferAsync(TestCase):
 
 
 class TestSimulateAsync(TestCase):
+    def test_wraps(self):
+        def simple():
+            """doc"""
+
+        f = simulate_async(simple)
+        self.assertEqual(f.__name__, "simple")
+        self.assertEqual(f.__doc__, "doc")
+        self.assertEqual(f.__module__, __name__)
+
     @inlineCallbacks
     def test_handles_successful_return(self):
         def simple():

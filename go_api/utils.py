@@ -2,6 +2,7 @@
 Small utilities for writing Vumi Go APIs.
 """
 
+from functools import wraps
 
 from twisted.internet.defer import Deferred, maybeDeferred
 
@@ -30,6 +31,7 @@ def simulate_async(f, reactor=None):
     if reactor is None:
         from twisted.internet import reactor
 
+    @wraps(f)
     def async_f(*args, **kw):
         d = maybeDeferred(f, *args, **kw)
         async_d = Deferred()
