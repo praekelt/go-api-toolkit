@@ -7,6 +7,8 @@ from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred)
 from zope.interface.verify import verifyObject
 
+from go_api.collections.errors import (
+    CollectionObjectNotFound, CollectionObjectAlreadyExists)
 from go_api.collections.inmemory import InMemoryCollection
 from go_api.collections.interfaces import ICollection
 
@@ -103,6 +105,22 @@ class TestInMemoryCollection(TestCase):
         self.assertEqual(all_data, [data])
 
     @inlineCallbacks
+    def test_get(self):
+        collection = InMemoryCollection()
+        key = yield collection.create(None, {"some": "data"})
+        data = yield collection.get(key)
+        self.assertEqual(data, {
+            "id": key,
+            "some": "data",
+        })
+
+    @inlineCallbacks
+    def test_get_missing_object(self):
+        collection = InMemoryCollection()
+        d = collection.get("missing")
+        yield self.failUnlessFailure(d, CollectionObjectNotFound)
+
+    @inlineCallbacks
     def test_create_no_id_no_data(self):
         """
         Creating an object with no object_id should generate one.
@@ -136,11 +154,19 @@ class TestInMemoryCollection(TestCase):
         self.assertEqual(data, {'foo': 'bar', 'id': key})
 
     @inlineCallbacks
+    def test_create_existing_id(self):
+        collection = InMemoryCollection()
+        key = yield collection.create(None, {'foo': 'bar'})
+        d = collection.create(key, {'baz': 'boo'})
+        yield self.failUnlessFailure(d, CollectionObjectAlreadyExists)
+        data = yield collection.get(key)
+        self.assertEqual(data, {'foo': 'bar', 'id': key})
+
+    @inlineCallbacks
     def test_delete_missing_row(self):
         collection = InMemoryCollection()
-
-        data = yield collection.delete('foo')
-        self.assertEqual(data, None)
+        d = collection.delete('foo')
+        yield self.failUnlessFailure(d, CollectionObjectNotFound)
         keys = yield collection.all_keys()
         self.assertEqual(keys, [])
 
@@ -170,3 +196,11 @@ class TestInMemoryCollection(TestCase):
         self.assertEqual(data, {'id': key, 'foo': 'bar'})
         data = yield collection.get(key)
         self.assertEqual(data, {'id': key, 'foo': 'bar'})
+
+    @inlineCallbacks
+    def test_collection_update_missing_row(self):
+        collection = InMemoryCollection()
+        d = collection.update('foo', {})
+        yield self.failUnlessFailure(d, CollectionObjectNotFound)
+        keys = yield collection.all_keys()
+        self.assertEqual(keys, [])

@@ -8,7 +8,10 @@ from uuid import uuid4
 from zope.interface import implementer
 
 from .interfaces import ICollection
-from ..utils import defer_async
+from .errors import (
+    CollectionObjectNotFound, CollectionObjectAlreadyExists,
+    CollectionUsageError)
+from ..utils import simulate_async
 
 
 @implementer(ICollection)
@@ -17,17 +20,10 @@ class InMemoryCollection(object):
     A Collection implementation backed by an in-memory dict.
     """
 
-    def __init__(self, data=None, reactor=None):
+    def __init__(self, data=None):
         if data is None:
             data = {}
         self._data = data
-        self.reactor = reactor
-
-    def _defer(self, value):
-        """
-        Return a Deferred that is fired asynchronously.
-        """
-        return defer_async(value, self.reactor)
 
     def _id_to_key(self, object_id):
         """
@@ -52,7 +48,6 @@ class InMemoryCollection(object):
         return True
 
     def _set_data(self, object_id, data):
-        # TODO: Get 'id' out of object data.
         row_data = deepcopy(data)
         row_data['id'] = object_id
         self._data[self._id_to_key(object_id)] = row_data
@@ -66,33 +61,44 @@ class InMemoryCollection(object):
             self._key_to_id(key) for key in self._data
             if self._is_my_key(key)]
 
+    @simulate_async
     def all_keys(self):
-        return self._defer(self._get_keys())
+        return self._get_keys()
 
+    @simulate_async
     def all(self):
-        return self._defer([
-            self._get_data(object_id) for object_id in self._get_keys()])
+        return [self._get_data(object_id) for object_id in self._get_keys()]
 
+    @simulate_async
     def get(self, object_id):
-        return self._defer(self._get_data(object_id))
+        data = self._get_data(object_id)
+        if data is None:
+            raise CollectionObjectNotFound(object_id)
+        return data
 
+    @simulate_async
     def create(self, object_id, data):
-        assert 'id' not in data  # TODO: Something better than assert.
         if object_id is None:
             object_id = uuid4().hex
+        if self._get_data(object_id) is not None:
+            raise CollectionObjectAlreadyExists(object_id)
         self._set_data(object_id, data)
-        return self._defer(object_id)
+        return object_id
 
+    @simulate_async
     def update(self, object_id, data):
-        assert object_id is not None  # TODO: Something better than assert.
-        assert self._id_to_key(object_id) in self._data
+        if not self._id_to_key(object_id) in self._data:
+            raise CollectionObjectNotFound(object_id)
         self._set_data(object_id, data)
-        return self._defer(self._get_data(object_id))
+        return self._get_data(object_id)
 
+    @simulate_async
     def delete(self, object_id):
         data = self._get_data(object_id)
+        if data is None:
+            raise CollectionObjectNotFound(object_id)
         self._data.pop(self._id_to_key(object_id), None)
-        return self._defer(data)
+        return data
 
 
 @implementer(ICollection)

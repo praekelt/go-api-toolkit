@@ -2,13 +2,14 @@
 """
 
 import json
+import traceback
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python import log
 
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 
-from ..utils import ensure_deferred
+from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
 def create_urlspec_regex(dfn, *args, **kw):
@@ -42,7 +43,8 @@ class BaseHandler(RequestHandler):
 
     def raise_err(self, failure, status_code, reason):
         """
-        Log the failure and raise a suitable :class:`HTTPError`.
+        Catch any error, log the failure and raise a suitable
+        :class:`HTTPError`.
 
         :type failure: twisted.python.failure.Failure
         :param failure:
@@ -52,9 +54,45 @@ class BaseHandler(RequestHandler):
         :param str reason:
             HTTP reason to return along with the status.
         """
+        if failure.check(HTTPError):
+            # re-raise any existing HTTPErrors
+            failure.raiseException()
         log.err(failure)
-        # TODO: write out a JSON error response.
         raise HTTPError(status_code, reason=reason)
+
+    def catch_err(self, failure, status_code, expected_error):
+        """
+        Catch a specific error and re-raise it as a suitable
+        :class:`HTTPError`. Do not log it.
+
+        :type failure: twisted.python.failure.Failure
+        :param failure:
+            failure that caused the error.
+        :type expected_error: subclass of :class:`Exception`
+        :param expected_error:
+            The exception class to trap.
+        :param int status_code:
+            HTTP status code to return.
+        """
+        if not failure.check(expected_error):
+            failure.raiseException()
+        raise HTTPError(status_code, reason=str(failure.value))
+
+    def write_error(self, status_code, **kw):
+        """
+        Overrides :class:`RequestHandler`'s ``.write_error`` to format
+        errors as JSON dictionaries.
+        """
+        error_data = {
+            "status_code": status_code,
+            "reason": str(kw.get("exception", self._reason)),
+        }
+        if self.settings.get("debug") and "exc_info" in kw:
+            # in debug mode, try to send a traceback
+            error_data["traceback"] = traceback.format_exception(
+                *kw["exc_info"])
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
+        self.finish(json.dumps(error_data))
 
     def write_object(self, obj):
         """
@@ -63,11 +101,7 @@ class BaseHandler(RequestHandler):
         :param dict obj:
             JSON serializable object to write out.
         """
-        d = ensure_deferred(obj)
-        d.addCallback(json.dumps)
-        d.addCallback(self.write)
-        d.addErrback(self.raise_err, 500, "Failed to write object")
-        return d
+        self.write(json.dumps(obj))
 
     @inlineCallbacks
     def write_objects(self, objs):
@@ -77,7 +111,6 @@ class BaseHandler(RequestHandler):
         :param list objs:
             List of dictionaries to write out.
         """
-        objs = yield objs
         for obj_deferred in objs:
             obj = yield obj_deferred
             if obj is None:
@@ -130,8 +163,10 @@ class CollectionHandler(BaseHandler):
         """
         Return all elements from a collection.
         """
-        d = self.write_objects(self.collection.all())
-        d.addErrback(self.raise_err, 500, "Failed to retrieve object.")
+        d = maybeDeferred(self.collection.all)
+        d.addCallback(self.write_objects)
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
+        d.addErrback(self.raise_err, 500, "Failed to retrieve objects.")
         return d
 
     def post(self, *args, **kw):
@@ -139,9 +174,10 @@ class CollectionHandler(BaseHandler):
         Create an element witin a collection.
         """
         data = json.loads(self.request.body)
-        d = self.collection.create(None, data)
+        d = maybeDeferred(self.collection.create, None, data)
         # TODO: better output once .create returns better things
         d.addCallback(lambda object_id: self.write_object({"id": object_id}))
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500, "Failed to create object.")
         return d
 
@@ -189,7 +225,10 @@ class ElementHandler(BaseHandler):
         """
         Retrieve an element within a collection.
         """
-        d = self.write_object(self.collection.get(self.elem_id))
+        d = maybeDeferred(self.collection.get, self.elem_id)
+        d.addCallback(self.write_object)
+        d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
                      "Failed to retrieve %r" % (self.elem_id,))
         return d
@@ -199,8 +238,10 @@ class ElementHandler(BaseHandler):
         Update an element within a collection.
         """
         data = json.loads(self.request.body)
-        d = self.collection.update(self.elem_id, data)
-        d.addCallback(lambda r: self.write_object({"success": True}))
+        d = maybeDeferred(self.collection.update, self.elem_id, data)
+        d.addCallback(self.write_object)
+        d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
                      "Failed to update %r" % (self.elem_id,))
         return d
@@ -209,8 +250,10 @@ class ElementHandler(BaseHandler):
         """
         Delete an element from within a collection.
         """
-        d = self.collection.delete(self.elem_id)
-        d.addCallback(lambda r: self.write_object({"success": True}))
+        d = maybeDeferred(self.collection.delete, self.elem_id)
+        d.addCallback(self.write_object)
+        d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
+        d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500,
                      "Failed to delete %r" % (self.elem_id,))
         return d
