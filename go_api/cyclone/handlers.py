@@ -175,8 +175,8 @@ class CollectionHandler(BaseHandler):
         """
         data = json.loads(self.request.body)
         d = maybeDeferred(self.collection.create, None, data)
-        # TODO: better output once .create returns better things
-        d.addCallback(lambda object_id: self.write_object({"id": object_id}))
+        # the result of .create is (object_id, obj)
+        d.addCallback(lambda result: self.write_object(result[1]))
         d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500, "Failed to create object.")
         return d

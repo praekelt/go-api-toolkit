@@ -30,7 +30,8 @@ class ICollection(Interface):
 
     def create(object_id, data):
         """
-        Create an object within the collection. May return a deferred.
+        Create an object within the collection and return the new ``object_id``
+        and object data. May return a deferred.
 
         If ``object_id`` is ``None``, an identifier will be generated. Some
         collections may insist on generating their own ``object_id`` and raise
@@ -42,7 +43,8 @@ class ICollection(Interface):
 
     def update(object_id, data):
         """
-        Update an object. May return a deferred.
+        Update an object and return the updated object data. May return a
+        deferred.
 
         ``object_id`` may not be ``None``.
 
@@ -52,7 +54,8 @@ class ICollection(Interface):
 
     def delete(object_id):
         """
-        Delete an object. May return a deferred.
+        Delete an object and return the deleted object data. May return a
+        deferred.
 
         ``object_id`` may not be ``None``.
 
