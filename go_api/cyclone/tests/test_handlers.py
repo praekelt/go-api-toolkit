@@ -74,6 +74,17 @@ class TestBaseHandler(TestCase):
         [err] = self.flushLoggedErrors(DummyError)
         self.assertEqual(err, f)
 
+    def test_raise_err_reraises_httperrors(self):
+        handler = self.handler_helper.mk_handler()
+        f = Failure(HTTPError(300, reason="Sparta!"))
+        try:
+            handler.raise_err(f, 500, "Eep")
+        except HTTPError, err:
+            pass
+        self.assertEqual(err.status_code, 300)
+        self.assertEqual(err.reason, "Sparta!")
+        self.assertEqual(self.flushLoggedErrors(HTTPError), [])
+
     def test_catch_err(self):
         handler = self.handler_helper.mk_handler()
         f = Failure(DummyError("Moop"))
@@ -83,6 +94,16 @@ class TestBaseHandler(TestCase):
             pass
         self.assertEqual(err.status_code, 400)
         self.assertEqual(err.reason, "Moop")
+        self.assertEqual(self.flushLoggedErrors(DummyError), [])
+
+    def test_catch_err_reraises_other_errors(self):
+        handler = self.handler_helper.mk_handler()
+        f = Failure(DummyError("Moop"))
+        try:
+            handler.catch_err(f, 500, HTTPError)
+        except DummyError, err:
+            pass
+        self.assertEqual(str(err), "Moop")
         self.assertEqual(self.flushLoggedErrors(DummyError), [])
 
     @inlineCallbacks

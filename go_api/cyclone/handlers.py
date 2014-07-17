@@ -74,7 +74,8 @@ class BaseHandler(RequestHandler):
         :param int status_code:
             HTTP status code to return.
         """
-        failure.trap(expected_error)
+        if not failure.check(expected_error):
+            failure.raiseException()
         raise HTTPError(status_code, reason=str(failure.value))
 
     def write_error(self, status_code, **kw):
