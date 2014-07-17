@@ -4,6 +4,8 @@
 import json
 import traceback
 
+import yaml
+
 from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python import log
 
@@ -297,6 +299,15 @@ def compose(f, g):
     return h
 
 
+def read_yaml_config(config_file, optional=True):
+    """Parse an (usually) optional YAML config file."""
+    if optional and config_file is None:
+        return {}
+    with file(config_file, 'r') as stream:
+        # Assume we get a dict out of this.
+        return yaml.safe_load(stream)
+
+
 class ApiApplication(Application):
     """
     An API for a set of collections and adhoc additional methods.
@@ -310,6 +321,11 @@ class ApiApplication(Application):
     def __init__(self, **settings):
         routes = self._build_routes()
         Application.__init__(self, routes, **settings)
+
+    def get_config_settings(self, config_file=None):
+        if config_file is None:
+            return {}
+        return read_yaml_config(config_file)
 
     def _build_routes(self):
         """
