@@ -29,8 +29,8 @@ class CollectionObjectNotFound(CollectionUsageError):
 
 class CollectionObjectAlreadyExists(CollectionUsageError):
     """
-    Raised by an ICollection when it is asked to get, update or delete an
-    object that doesn't exist.
+    Raised by an ICollection when it is asked to create an object that
+    already exists.
     """
     def __init__(self, object_id, object_type=u"Object"):
         CollectionUsageError.__init__(
