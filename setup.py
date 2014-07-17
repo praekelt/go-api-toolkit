@@ -15,6 +15,7 @@ setup(
         'cyclone',
         'zope.interface',
         'treq',
+        'PyYAML',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',

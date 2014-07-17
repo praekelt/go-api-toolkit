@@ -98,8 +98,7 @@ class TestInMemoryCollection(TestCase):
         Listing all rows returns a non-empty list when rows exist in the store.
         """
         collection = InMemoryCollection()
-        key = yield collection.create(None, {})
-        data = yield collection.get(key)
+        key, data = yield collection.create(None, {})
 
         all_data = yield self.filtered_all(collection)
         self.assertEqual(all_data, [data])
@@ -107,8 +106,7 @@ class TestInMemoryCollection(TestCase):
     @inlineCallbacks
     def test_get(self):
         collection = InMemoryCollection()
-        key = yield collection.create(None, {"some": "data"})
-        data = yield collection.get(key)
+        key, data = yield collection.create(None, {"some": "data"})
         self.assertEqual(data, {
             "id": key,
             "some": "data",
@@ -127,8 +125,9 @@ class TestInMemoryCollection(TestCase):
         """
         collection = InMemoryCollection()
 
-        key = yield collection.create(None, {})
+        key, created_data = yield collection.create(None, {})
         data = yield collection.get(key)
+        self.assertEqual(created_data, {'id': key})
         self.assertEqual(data, {'id': key})
 
     @inlineCallbacks
@@ -138,25 +137,27 @@ class TestInMemoryCollection(TestCase):
         """
         collection = InMemoryCollection()
 
-        key = yield collection.create('key', {})
+        key, created_data = yield collection.create('key', {})
         self.assertEqual(key, 'key')
         data = yield collection.get(key)
+        self.assertEqual(created_data, {'id': 'key'})
         self.assertEqual(data, {'id': 'key'})
 
     @inlineCallbacks
     def test_create_no_id_with_data(self):
         collection = InMemoryCollection()
 
-        key = yield collection.create(None, {'foo': 'bar'})
+        key, created_data = yield collection.create(None, {'foo': 'bar'})
         keys = yield collection.all_keys()
         self.assertEqual(keys, [key])
         data = yield collection.get(key)
+        self.assertEqual(created_data, {'foo': 'bar', 'id': key})
         self.assertEqual(data, {'foo': 'bar', 'id': key})
 
     @inlineCallbacks
     def test_create_existing_id(self):
         collection = InMemoryCollection()
-        key = yield collection.create(None, {'foo': 'bar'})
+        key, _ = yield collection.create(None, {'foo': 'bar'})
         d = collection.create(key, {'baz': 'boo'})
         yield self.failUnlessFailure(d, CollectionObjectAlreadyExists)
         data = yield collection.get(key)
@@ -174,7 +175,7 @@ class TestInMemoryCollection(TestCase):
     def test_delete_existing_row(self):
         collection = InMemoryCollection()
 
-        key = yield collection.create(None, {})
+        key, _ = yield collection.create(None, {})
         keys = yield collection.all_keys()
         self.ensure_equal(keys, [key])
 
@@ -187,8 +188,7 @@ class TestInMemoryCollection(TestCase):
     def test_collection_update(self):
         collection = InMemoryCollection()
 
-        key = yield collection.create(None, {})
-        data = yield collection.get(key)
+        key, data = yield collection.create(None, {})
         self.ensure_equal(data, {'id': key})
 
         data = yield collection.update(

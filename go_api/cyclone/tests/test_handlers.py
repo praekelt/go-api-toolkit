@@ -1,5 +1,7 @@
 import json
 
+import yaml
+
 from twisted.trial.unittest import TestCase
 from twisted.python.failure import Failure
 from twisted.internet.defer import inlineCallbacks
@@ -209,7 +211,8 @@ class TestCollectionHandler(BaseHandlerTestCase):
     def test_post(self):
         data = yield self.app_helper.post(
             '/root', data=json.dumps({"foo": "bar"}), parser='json')
-        self.assertEqual(data.keys(), ["id"])
+        object_id = data["id"]
+        self.assertEqual(data, {"foo": "bar", "id": object_id})
         self.assertEqual(
             self.collection_data[data["id"]],
             {"foo": "bar", "id": data["id"]})
@@ -443,3 +446,19 @@ class TestApiApplication(TestCase):
         return self.check_build_routes_with_preprocessor(
             owner_from_path_kwarg("owner_id"),
             path_kwargs={"owner_id": "owner-1"})
+
+    def test_get_config_settings_None(self):
+        app = ApiApplication()
+        self.assertEqual(app.get_config_settings(), {})
+        self.assertEqual(app.get_config_settings(None), {})
+
+    def test_get_config_settings(self):
+        config_dict = {'foo': 'bar', 'baz': [1, 2, 3]}
+
+        # Trial cleans this up for us.
+        tempfile = self.mktemp()
+        with open(tempfile, 'wb') as fp:
+            yaml.safe_dump(config_dict, fp)
+
+        app = ApiApplication()
+        self.assertEqual(app.get_config_settings(tempfile), config_dict)
