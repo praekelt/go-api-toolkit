@@ -83,7 +83,7 @@ class InMemoryCollection(object):
         if self._get_data(object_id) is not None:
             raise CollectionObjectAlreadyExists(object_id)
         self._set_data(object_id, data)
-        return object_id
+        return (object_id, self._get_data(object_id))
 
     @simulate_async
     def update(self, object_id, data):
