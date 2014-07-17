@@ -27,6 +27,11 @@ def simulate_async(f, reactor=None):
     Decorator to use on synchronous methods to convert their
     result to an asynchronous deferred that fires after the
     reactor has been given a chance to run.
+
+    Synchronous methods might return a deferred that has
+    already fired. :func:`simulate_async` supports that case
+    by returning a new deferred that will only fire after the
+    reactor has run.
     """
     if reactor is None:
         from twisted.internet import reactor
