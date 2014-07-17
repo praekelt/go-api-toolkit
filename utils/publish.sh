@@ -1,6 +1,6 @@
-#!/bin/sh
+#!/bin/sh -e
 
-rm dist/*
+rm dist/* || true
 python setup.py sdist bdist_wheel
 python setup.py register
 twine-upload dist/*.tar.gz
