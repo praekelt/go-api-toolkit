@@ -323,8 +323,6 @@ class ApiApplication(Application):
         Application.__init__(self, routes, **settings)
 
     def get_config_settings(self, config_file=None):
-        if config_file is None:
-            return {}
         return read_yaml_config(config_file)
 
     def _build_routes(self):
