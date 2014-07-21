@@ -4,7 +4,7 @@ import yaml
 
 from twisted.trial.unittest import TestCase
 from twisted.python.failure import Failure
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, succeed
 
 from cyclone.web import HTTPError
 
@@ -410,6 +410,7 @@ class TestApiApplication(TestCase):
             "collection_factory": collection_factory,
         })
 
+    @inlineCallbacks
     def check_build_routes_with_preprocessor(self, preprocessor=None,
                                              **handler_kw):
         collection_factory = lambda owner_id: "collection-%s" % owner_id
@@ -423,14 +424,14 @@ class TestApiApplication(TestCase):
         [collection_route, elem_route] = app._build_routes()
 
         handler = self.collection_helper.mk_handler(**handler_kw)
-        self.assertEqual(
-            collection_route.kwargs["collection_factory"](handler),
-            "collection-owner-1")
+        route_func = collection_route.kwargs["collection_factory"]
+        owner = yield route_func(handler)
+        self.assertEqual(owner, "collection-owner-1")
 
         handler = self.element_helper.mk_handler(**handler_kw)
-        self.assertEqual(
-            elem_route.kwargs["collection_factory"](handler),
-            "collection-owner-1")
+        route_func = elem_route.kwargs["collection_factory"]
+        owner = yield route_func(handler)
+        self.assertEqual(owner, "collection-owner-1")
 
     def test_build_routes_with_default_preprocessor(self):
         return self.check_build_routes_with_preprocessor(
@@ -446,6 +447,10 @@ class TestApiApplication(TestCase):
         return self.check_build_routes_with_preprocessor(
             owner_from_path_kwarg("owner_id"),
             path_kwargs={"owner_id": "owner-1"})
+
+    def test_build_routes_with_async_preprocessor(self):
+        return self.check_build_routes_with_preprocessor(
+            lambda handler: succeed("owner-1"))
 
     def test_get_config_settings_None(self):
         app = ApiApplication()

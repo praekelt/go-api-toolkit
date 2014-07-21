@@ -295,7 +295,9 @@ def compose(f, g):
     Compose two functions, ``f`` and ``g``.
     """
     def h(*args, **kw):
-        return f(g(*args, **kw))
+        d = maybeDeferred(g, *args, **kw)
+        d.addCallback(f)
+        return d
     return h
 
 
