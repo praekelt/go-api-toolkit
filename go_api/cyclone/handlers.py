@@ -282,7 +282,7 @@ def owner_from_header(header):
 
 def owner_from_path_kwarg(path_kwarg):
     """
-    Return a function that retrieves a collection owner if from
+    Return a function that retrieves a collection owner id from
     the specified path argument.
 
     :param str path_kwarg:
@@ -295,11 +295,12 @@ def owner_from_path_kwarg(path_kwarg):
 
 def owner_from_oauth2_bouncer(url_base):
     """
-    Return a function that retrieves a collection owner if from
-    the specified path argument.
+    Return a function that retrieves a collection owner id from a call to an
+    auth service API.
 
-    :param str path_kwarg:
-        The name of the path argument. E.g. ``owner_id``.
+    :param str url_base:
+        The base URL to make an auth request to.
+
     """
     @inlineCallbacks
     def owner_factory(handler):
