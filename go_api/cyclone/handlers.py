@@ -4,9 +4,10 @@
 import json
 import traceback
 
+import treq
 import yaml
 
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.internet.defer import inlineCallbacks, maybeDeferred, returnValue
 from twisted.python import log
 
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
@@ -292,9 +293,29 @@ def owner_from_path_kwarg(path_kwarg):
     return owner_factory
 
 
-def compose(f, g):
+def owner_from_oauth2_bouncer(url_base):
     """
-    Compose two functions, ``f`` and ``g``.
+    Return a function that retrieves a collection owner if from
+    the specified path argument.
+
+    :param str path_kwarg:
+        The name of the path argument. E.g. ``owner_id``.
+    """
+    @inlineCallbacks
+    def owner_factory(handler):
+        request = handler.request
+        uri = "".join([url_base.rstrip('/'), request.uri])
+        resp = yield treq.request(
+            request.method, uri, headers=request.headers, persistent=False)
+        [owner] = resp.headers.getRawHeaders('X-Owner-Id')
+        yield resp.content()  # Finish the request.
+        returnValue(owner)
+    return owner_factory
+
+
+def compose_deferred(f, g):
+    """
+    Compose two functions, ``f`` and ``g``, any of which may return a Deferred.
     """
     def h(*args, **kw):
         d = maybeDeferred(g, *args, **kw)
@@ -351,7 +372,7 @@ class ApiApplication(Application):
         routes = []
         for dfn, collection_factory in self.collections:
             if self.collection_factory_preprocessor is not None:
-                collection_factory = compose(
+                collection_factory = compose_deferred(
                     collection_factory, self.collection_factory_preprocessor)
             routes.extend((
                 CollectionHandler.mk_urlspec(dfn, collection_factory),

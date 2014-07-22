@@ -4,7 +4,7 @@ import yaml
 
 from twisted.trial.unittest import TestCase
 from twisted.python.failure import Failure
-from twisted.internet.defer import inlineCallbacks, succeed
+from twisted.internet.defer import inlineCallbacks, succeed, returnValue
 
 from cyclone.web import HTTPError
 
@@ -13,8 +13,8 @@ from go_api.collections.errors import CollectionUsageError
 from go_api.cyclone.handlers import (
     BaseHandler, CollectionHandler, ElementHandler,
     create_urlspec_regex, ApiApplication,
-    owner_from_header, owner_from_path_kwarg)
-from go_api.cyclone.helpers import HandlerHelper, AppHelper
+    owner_from_header, owner_from_path_kwarg, owner_from_oauth2_bouncer)
+from go_api.cyclone.helpers import HandlerHelper, AppHelper, MockHttpServer
 
 
 class DummyError(Exception):
@@ -371,6 +371,7 @@ class TestApiApplication(TestCase):
     def setUp(self):
         # these helpers should never have their collection factories
         # called in these tests
+        self._cleanup_funcs = []
         self.collection_helper = HandlerHelper(
             CollectionHandler,
             handler_kwargs={
@@ -381,6 +382,24 @@ class TestApiApplication(TestCase):
             handler_kwargs={
                 "collection_factory": self.uncallable_collection_factory,
             })
+
+    @inlineCallbacks
+    def tearDown(self):
+        for func in reversed(self._cleanup_funcs):
+            yield func()
+
+    def add_cleanup(self, func):
+        self._cleanup_funcs.append(func)
+
+    @inlineCallbacks
+    def start_fake_auth_server(self, owner_id):
+        def auth_request(request):
+            request.setHeader("X-Owner-Id", owner_id)
+            return ""
+        fake_server = MockHttpServer(auth_request)
+        yield fake_server.start()
+        self.add_cleanup(fake_server.stop)
+        returnValue(fake_server)
 
     def get_collection_factory(self, data):
         collection = InMemoryCollection(data)
@@ -427,6 +446,18 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=lambda handler: succeed("owner-1"))
+        result = yield app_helper.request('GET', '/foo/store')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
+    @inlineCallbacks
+    def test_process_request_bouncer_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        auth_server = yield self.start_fake_auth_server("owner-1")
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_oauth2_bouncer(auth_server.url))
         result = yield app_helper.request('GET', '/foo/store')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
@@ -512,6 +543,18 @@ class TestApiApplication(TestCase):
 
         yield self.assert_handlers_get_owner(
             app_helper.app, "collection-owner-1")
+
+    @inlineCallbacks
+    def test_build_routes_with_bouncer_preprocessor(self):
+        auth_server = yield self.start_fake_auth_server("owner-1")
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_oauth2_bouncer(auth_server.url))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
+            headers={"Authorization": "Bearer token"})
 
     def test_get_config_settings_None(self):
         app = ApiApplication()
