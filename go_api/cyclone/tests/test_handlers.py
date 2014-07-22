@@ -382,6 +382,33 @@ class TestApiApplication(TestCase):
                 "collection_factory": self.uncallable_collection_factory,
             })
 
+    def get_collection_factory(self, data):
+        collection = InMemoryCollection(data)
+        return lambda _req: collection
+
+    def get_app_helper(self, collections=ApiApplication.collections,
+                       preprocessor=(
+                           ApiApplication.collection_factory_preprocessor)):
+        class MyApiApplication(ApiApplication):
+            pass
+
+        MyApiApplication.collections = collections
+        if callable(preprocessor):
+            preprocessor = staticmethod(preprocessor)
+        MyApiApplication.collection_factory_preprocessor = preprocessor
+        return AppHelper(MyApiApplication())
+
+    @inlineCallbacks
+    def test_process_request_no_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=None)
+        result = yield app_helper.request('GET', '/foo/store')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
     def uncallable_collection_factory(self, *args, **kw):
         """
         A collection_factory for use in tests that need one but should never
@@ -391,12 +418,10 @@ class TestApiApplication(TestCase):
 
     def test_build_routes_no_preprocesor(self):
         collection_factory = self.uncallable_collection_factory
-        app = ApiApplication()
-        app.collections = (
-            ('/:owner_id/store', collection_factory),
-        )
-        app.collection_factory_preprocessor = None
-        [collection_route, elem_route] = app._build_routes()
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=None)
+        [collection_route, elem_route] = app_helper.app.handlers[0][1]
         self.assertEqual(collection_route.handler_class, CollectionHandler)
         self.assertEqual(collection_route.regex.pattern,
                          "/(?P<owner_id>[^/]*)/store$")
@@ -411,46 +436,60 @@ class TestApiApplication(TestCase):
         })
 
     @inlineCallbacks
-    def check_build_routes_with_preprocessor(self, preprocessor=None,
-                                             **handler_kw):
-        collection_factory = lambda owner_id: "collection-%s" % owner_id
-        app = ApiApplication()
-        app.collections = (
-            ('/:owner_id/store', collection_factory),
-        )
-        if preprocessor is not None:
-            app.collection_factory_preprocessor = preprocessor
-
-        [collection_route, elem_route] = app._build_routes()
+    def assert_handlers_get_owner(self, app, collection_name, **handler_kw):
+        [collection_route, elem_route] = app.handlers[0][1]
 
         handler = self.collection_helper.mk_handler(**handler_kw)
-        route_func = collection_route.kwargs["collection_factory"]
-        owner = yield route_func(handler)
-        self.assertEqual(owner, "collection-owner-1")
+        collection_factory = collection_route.kwargs["collection_factory"]
+        owner = yield collection_factory(handler)
+        self.assertEqual(owner, collection_name)
 
         handler = self.element_helper.mk_handler(**handler_kw)
-        route_func = elem_route.kwargs["collection_factory"]
-        owner = yield route_func(handler)
-        self.assertEqual(owner, "collection-owner-1")
+        collection_factory = elem_route.kwargs["collection_factory"]
+        owner = yield collection_factory(handler)
+        self.assertEqual(owner, collection_name)
 
+    @inlineCallbacks
     def test_build_routes_with_default_preprocessor(self):
-        return self.check_build_routes_with_preprocessor(
-            None,
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
             headers={"X-Owner-ID": "owner-1"})
 
+    @inlineCallbacks
     def test_build_routes_with_header_preprocessor(self):
-        return self.check_build_routes_with_preprocessor(
-            owner_from_header("X-Foo-ID"),
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_header("X-Foo-ID"))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
             headers={"X-Foo-ID": "owner-1"})
 
+    @inlineCallbacks
     def test_build_routes_with_path_kwargs_preprocessor(self):
-        return self.check_build_routes_with_preprocessor(
-            owner_from_path_kwarg("owner_id"),
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_path_kwarg("owner_id"))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
             path_kwargs={"owner_id": "owner-1"})
 
+    @inlineCallbacks
     def test_build_routes_with_async_preprocessor(self):
-        return self.check_build_routes_with_preprocessor(
-            lambda handler: succeed("owner-1"))
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=lambda handler: succeed("owner-1"))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1")
 
     def test_get_config_settings_None(self):
         app = ApiApplication()
