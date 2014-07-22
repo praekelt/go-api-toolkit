@@ -399,12 +399,34 @@ class TestApiApplication(TestCase):
         return AppHelper(MyApiApplication())
 
     @inlineCallbacks
+    def test_process_request_default_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),))
+        result = yield app_helper.request(
+            'GET', '/foo/store', headers={"X-Owner-ID": "owner-1"})
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
+    @inlineCallbacks
     def test_process_request_no_preprocessor(self):
         collection_data = {'foo': {'id': 'foo'}}
         collection_factory = self.get_collection_factory(collection_data)
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=None)
+        result = yield app_helper.request('GET', '/foo/store')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
+    @inlineCallbacks
+    def test_process_request_async_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=lambda handler: succeed("owner-1"))
         result = yield app_helper.request('GET', '/foo/store')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
