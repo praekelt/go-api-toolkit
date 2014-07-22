@@ -158,8 +158,9 @@ class CollectionHandler(BaseHandler):
     def initialize(self, collection_factory):
         self.collection_factory = collection_factory
 
+    @inlineCallbacks
     def prepare(self):
-        self.collection = self.collection_factory(self)
+        self.collection = yield self.collection_factory(self)
 
     def get(self, *args, **kw):
         """
@@ -295,7 +296,9 @@ def compose(f, g):
     Compose two functions, ``f`` and ``g``.
     """
     def h(*args, **kw):
-        return f(g(*args, **kw))
+        d = maybeDeferred(g, *args, **kw)
+        d.addCallback(f)
+        return d
     return h
 
 
