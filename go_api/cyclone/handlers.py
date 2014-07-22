@@ -220,9 +220,10 @@ class ElementHandler(BaseHandler):
     def initialize(self, collection_factory):
         self.collection_factory = collection_factory
 
+    @inlineCallbacks
     def prepare(self):
         self.elem_id = self.path_kwargs['elem_id']
-        self.collection = self.collection_factory(self)
+        self.collection = yield self.collection_factory(self)
 
     def get(self, *args, **kw):
         """
@@ -316,14 +317,28 @@ class ApiApplication(Application):
     An API for a set of collections and adhoc additional methods.
     """
 
+    config_required = False
+
     collections = ()
 
     collection_factory_preprocessor = staticmethod(
         owner_from_header('X-Owner-ID'))
 
-    def __init__(self, **settings):
+    def __init__(self, config_file=None, **settings):
+        if self.config_required and config_file is None:
+            raise ValueError(
+                "Please specify a config file using --appopts=<config.yaml>")
+        config = self.get_config_settings(config_file)
+        self.initialize(settings, config)
         routes = self._build_routes()
         Application.__init__(self, routes, **settings)
+
+    def initialize(self, settings, config):
+        """
+        Subclasses should override this to perform any application-level setup
+        they need.
+        """
+        pass
 
     def get_config_settings(self, config_file=None):
         return read_yaml_config(config_file)

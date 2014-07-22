@@ -528,3 +528,26 @@ class TestApiApplication(TestCase):
 
         app = ApiApplication()
         self.assertEqual(app.get_config_settings(tempfile), config_dict)
+
+    def test_initialize_without_config(self):
+        class MyApiApplication(ApiApplication):
+            def initialize(self, settings, config):
+                self.config_for_test = config
+
+        app = MyApiApplication()
+        self.assertEqual(app.config_for_test, {})
+
+    def test_initialize_with_config(self):
+        config_dict = {'foo': 'bar', 'baz': [1, 2, 3]}
+
+        # Trial cleans this up for us.
+        tempfile = self.mktemp()
+        with open(tempfile, 'wb') as fp:
+            yaml.safe_dump(config_dict, fp)
+
+        class MyApiApplication(ApiApplication):
+            def initialize(self, settings, config):
+                self.config_for_test = config
+
+        app = MyApiApplication(tempfile)
+        self.assertEqual(app.config_for_test, config_dict)
