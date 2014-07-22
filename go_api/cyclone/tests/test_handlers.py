@@ -594,3 +594,24 @@ class TestApiApplication(TestCase):
 
         app = MyApiApplication(tempfile)
         self.assertEqual(app.config_for_test, config_dict)
+
+    def test_configure_auth_bouncer(self):
+        config_dict = {'auth_bouncer_url': 'http://example.com/'}
+
+        # Trial cleans this up for us.
+        tempfile = self.mktemp()
+        with open(tempfile, 'wb') as fp:
+            yaml.safe_dump(config_dict, fp)
+
+        # There's no easy way to test equality of closures, so we just assert
+        # that we don't have the default preprocessor.
+        app = ApiApplication(tempfile)
+        self.assertNotEqual(
+            app.collection_factory_preprocessor,
+            ApiApplication.collection_factory_preprocessor)
+
+        # With no config specified, we should have the default preprocessor.
+        app = ApiApplication()
+        self.assertEqual(
+            app.collection_factory_preprocessor,
+            ApiApplication.collection_factory_preprocessor)

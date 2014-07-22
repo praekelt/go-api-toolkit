@@ -350,6 +350,7 @@ class ApiApplication(Application):
             raise ValueError(
                 "Please specify a config file using --appopts=<config.yaml>")
         config = self.get_config_settings(config_file)
+        self.setup_collection_factory_preprocessor(config)
         self.initialize(settings, config)
         routes = self._build_routes()
         Application.__init__(self, routes, **settings)
@@ -360,6 +361,13 @@ class ApiApplication(Application):
         they need.
         """
         pass
+
+    def setup_collection_factory_preprocessor(self, config):
+        # TODO: Better configuration mechanism than this.
+        auth_bouncer_url = config.get('auth_bouncer_url')
+        if auth_bouncer_url is not None:
+            self.collection_factory_preprocessor = (
+                owner_from_oauth2_bouncer(auth_bouncer_url))
 
     def get_config_settings(self, config_file=None):
         return read_yaml_config(config_file)
