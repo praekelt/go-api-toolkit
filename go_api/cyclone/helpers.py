@@ -4,8 +4,10 @@ Helpers for use in tests.
 
 import json
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 from twisted.internet import reactor
+from twisted.web.resource import Resource
+from twisted.web.server import Site
 
 import treq
 
@@ -23,6 +25,8 @@ class _DummyRequest(object):
     Extremely dummy request for use with :meth:`HandlerHelper.mk_handler`.
     """
     def __init__(self, headers=None):
+        self.method = 'GET'
+        self.uri = '/'
         self.supports_http_1_1 = lambda: True
         self.connection = _DummyConnection()
         self.headers = headers or {}
@@ -133,3 +137,46 @@ class AppHelper(object):
 
     def delete(self, url, **kw):
         return self.request('DELETE', url, **kw)
+
+
+class MockResource(Resource):
+    isLeaf = True
+
+    def __init__(self, handler):
+        Resource.__init__(self)
+        self.handler = handler
+
+    def render_GET(self, request):
+        return self.handler(request)
+
+    def render_POST(self, request):
+        return self.handler(request)
+
+    def render_PUT(self, request):
+        return self.handler(request)
+
+
+class MockHttpServer(object):
+
+    def __init__(self, handler=None):
+        self.queue = DeferredQueue()
+        self._handler = handler or self.handle_request
+        self._webserver = None
+        self.addr = None
+        self.url = None
+
+    def handle_request(self, request):
+        self.queue.put(request)
+
+    @inlineCallbacks
+    def start(self):
+        site_factory = Site(MockResource(self._handler))
+        self._webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
+        self.addr = self._webserver.getHost()
+        self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
+
+    @inlineCallbacks
+    def stop(self):
+        yield self._webserver.stopListening()
+        yield self._webserver.loseConnection()

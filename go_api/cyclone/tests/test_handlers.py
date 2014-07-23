@@ -4,7 +4,7 @@ import yaml
 
 from twisted.trial.unittest import TestCase
 from twisted.python.failure import Failure
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, succeed, returnValue
 
 from cyclone.web import HTTPError
 
@@ -13,8 +13,8 @@ from go_api.collections.errors import CollectionUsageError
 from go_api.cyclone.handlers import (
     BaseHandler, CollectionHandler, ElementHandler,
     create_urlspec_regex, ApiApplication,
-    owner_from_header, owner_from_path_kwarg)
-from go_api.cyclone.helpers import HandlerHelper, AppHelper
+    owner_from_header, owner_from_path_kwarg, owner_from_oauth2_bouncer)
+from go_api.cyclone.helpers import HandlerHelper, AppHelper, MockHttpServer
 
 
 class DummyError(Exception):
@@ -371,6 +371,7 @@ class TestApiApplication(TestCase):
     def setUp(self):
         # these helpers should never have their collection factories
         # called in these tests
+        self._cleanup_funcs = []
         self.collection_helper = HandlerHelper(
             CollectionHandler,
             handler_kwargs={
@@ -382,6 +383,85 @@ class TestApiApplication(TestCase):
                 "collection_factory": self.uncallable_collection_factory,
             })
 
+    @inlineCallbacks
+    def tearDown(self):
+        for func in reversed(self._cleanup_funcs):
+            yield func()
+
+    def add_cleanup(self, func):
+        self._cleanup_funcs.append(func)
+
+    @inlineCallbacks
+    def start_fake_auth_server(self, owner_id):
+        def auth_request(request):
+            request.setHeader("X-Owner-Id", owner_id)
+            return ""
+        fake_server = MockHttpServer(auth_request)
+        yield fake_server.start()
+        self.add_cleanup(fake_server.stop)
+        returnValue(fake_server)
+
+    def get_collection_factory(self, data):
+        collection = InMemoryCollection(data)
+        return lambda _req: collection
+
+    def get_app_helper(self, collections=ApiApplication.collections,
+                       preprocessor=(
+                           ApiApplication.collection_factory_preprocessor)):
+        class MyApiApplication(ApiApplication):
+            pass
+
+        MyApiApplication.collections = collections
+        if callable(preprocessor):
+            preprocessor = staticmethod(preprocessor)
+        MyApiApplication.collection_factory_preprocessor = preprocessor
+        return AppHelper(MyApiApplication())
+
+    @inlineCallbacks
+    def test_process_request_default_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),))
+        result = yield app_helper.request(
+            'GET', '/foo/store', headers={"X-Owner-ID": "owner-1"})
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
+    @inlineCallbacks
+    def test_process_request_no_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=None)
+        result = yield app_helper.request('GET', '/foo/store')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
+    @inlineCallbacks
+    def test_process_request_async_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=lambda handler: succeed("owner-1"))
+        result = yield app_helper.request('GET', '/foo/store')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
+    @inlineCallbacks
+    def test_process_request_bouncer_preprocessor(self):
+        collection_data = {'foo': {'id': 'foo'}}
+        collection_factory = self.get_collection_factory(collection_data)
+        auth_server = yield self.start_fake_auth_server("owner-1")
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_oauth2_bouncer(auth_server.url))
+        result = yield app_helper.request('GET', '/foo/store')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), collection_data['foo'])
+
     def uncallable_collection_factory(self, *args, **kw):
         """
         A collection_factory for use in tests that need one but should never
@@ -391,12 +471,10 @@ class TestApiApplication(TestCase):
 
     def test_build_routes_no_preprocesor(self):
         collection_factory = self.uncallable_collection_factory
-        app = ApiApplication()
-        app.collections = (
-            ('/:owner_id/store', collection_factory),
-        )
-        app.collection_factory_preprocessor = None
-        [collection_route, elem_route] = app._build_routes()
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=None)
+        [collection_route, elem_route] = app_helper.app.handlers[0][1]
         self.assertEqual(collection_route.handler_class, CollectionHandler)
         self.assertEqual(collection_route.regex.pattern,
                          "/(?P<owner_id>[^/]*)/store$")
@@ -410,42 +488,73 @@ class TestApiApplication(TestCase):
             "collection_factory": collection_factory,
         })
 
-    def check_build_routes_with_preprocessor(self, preprocessor=None,
-                                             **handler_kw):
-        collection_factory = lambda owner_id: "collection-%s" % owner_id
-        app = ApiApplication()
-        app.collections = (
-            ('/:owner_id/store', collection_factory),
-        )
-        if preprocessor is not None:
-            app.collection_factory_preprocessor = preprocessor
-
-        [collection_route, elem_route] = app._build_routes()
+    @inlineCallbacks
+    def assert_handlers_get_owner(self, app, collection_name, **handler_kw):
+        [collection_route, elem_route] = app.handlers[0][1]
 
         handler = self.collection_helper.mk_handler(**handler_kw)
-        self.assertEqual(
-            collection_route.kwargs["collection_factory"](handler),
-            "collection-owner-1")
+        collection_factory = collection_route.kwargs["collection_factory"]
+        owner = yield collection_factory(handler)
+        self.assertEqual(owner, collection_name)
 
         handler = self.element_helper.mk_handler(**handler_kw)
-        self.assertEqual(
-            elem_route.kwargs["collection_factory"](handler),
-            "collection-owner-1")
+        collection_factory = elem_route.kwargs["collection_factory"]
+        owner = yield collection_factory(handler)
+        self.assertEqual(owner, collection_name)
 
+    @inlineCallbacks
     def test_build_routes_with_default_preprocessor(self):
-        return self.check_build_routes_with_preprocessor(
-            None,
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
             headers={"X-Owner-ID": "owner-1"})
 
+    @inlineCallbacks
     def test_build_routes_with_header_preprocessor(self):
-        return self.check_build_routes_with_preprocessor(
-            owner_from_header("X-Foo-ID"),
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_header("X-Foo-ID"))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
             headers={"X-Foo-ID": "owner-1"})
 
+    @inlineCallbacks
     def test_build_routes_with_path_kwargs_preprocessor(self):
-        return self.check_build_routes_with_preprocessor(
-            owner_from_path_kwarg("owner_id"),
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_path_kwarg("owner_id"))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
             path_kwargs={"owner_id": "owner-1"})
+
+    @inlineCallbacks
+    def test_build_routes_with_async_preprocessor(self):
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=lambda handler: succeed("owner-1"))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1")
+
+    @inlineCallbacks
+    def test_build_routes_with_bouncer_preprocessor(self):
+        auth_server = yield self.start_fake_auth_server("owner-1")
+        collection_factory = lambda owner_id: "collection-%s" % owner_id
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            preprocessor=owner_from_oauth2_bouncer(auth_server.url))
+
+        yield self.assert_handlers_get_owner(
+            app_helper.app, "collection-owner-1",
+            headers={"Authorization": "Bearer token"})
 
     def test_get_config_settings_None(self):
         app = ApiApplication()
@@ -462,3 +571,47 @@ class TestApiApplication(TestCase):
 
         app = ApiApplication()
         self.assertEqual(app.get_config_settings(tempfile), config_dict)
+
+    def test_initialize_without_config(self):
+        class MyApiApplication(ApiApplication):
+            def initialize(self, settings, config):
+                self.config_for_test = config
+
+        app = MyApiApplication()
+        self.assertEqual(app.config_for_test, {})
+
+    def test_initialize_with_config(self):
+        config_dict = {'foo': 'bar', 'baz': [1, 2, 3]}
+
+        # Trial cleans this up for us.
+        tempfile = self.mktemp()
+        with open(tempfile, 'wb') as fp:
+            yaml.safe_dump(config_dict, fp)
+
+        class MyApiApplication(ApiApplication):
+            def initialize(self, settings, config):
+                self.config_for_test = config
+
+        app = MyApiApplication(tempfile)
+        self.assertEqual(app.config_for_test, config_dict)
+
+    def test_configure_auth_bouncer(self):
+        config_dict = {'auth_bouncer_url': 'http://example.com/'}
+
+        # Trial cleans this up for us.
+        tempfile = self.mktemp()
+        with open(tempfile, 'wb') as fp:
+            yaml.safe_dump(config_dict, fp)
+
+        # There's no easy way to test equality of closures, so we just assert
+        # that we don't have the default preprocessor.
+        app = ApiApplication(tempfile)
+        self.assertNotEqual(
+            app.collection_factory_preprocessor,
+            ApiApplication.collection_factory_preprocessor)
+
+        # With no config specified, we should have the default preprocessor.
+        app = ApiApplication()
+        self.assertEqual(
+            app.collection_factory_preprocessor,
+            ApiApplication.collection_factory_preprocessor)
