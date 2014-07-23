@@ -4,9 +4,10 @@
 import json
 import traceback
 
+import treq
 import yaml
 
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.internet.defer import inlineCallbacks, maybeDeferred, returnValue
 from twisted.python import log
 
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
@@ -220,9 +221,10 @@ class ElementHandler(BaseHandler):
     def initialize(self, collection_factory):
         self.collection_factory = collection_factory
 
+    @inlineCallbacks
     def prepare(self):
         self.elem_id = self.path_kwargs['elem_id']
-        self.collection = self.collection_factory(self)
+        self.collection = yield self.collection_factory(self)
 
     def get(self, *args, **kw):
         """
@@ -280,7 +282,7 @@ def owner_from_header(header):
 
 def owner_from_path_kwarg(path_kwarg):
     """
-    Return a function that retrieves a collection owner if from
+    Return a function that retrieves a collection owner id from
     the specified path argument.
 
     :param str path_kwarg:
@@ -291,9 +293,30 @@ def owner_from_path_kwarg(path_kwarg):
     return owner_factory
 
 
-def compose(f, g):
+def owner_from_oauth2_bouncer(url_base):
     """
-    Compose two functions, ``f`` and ``g``.
+    Return a function that retrieves a collection owner id from a call to an
+    auth service API.
+
+    :param str url_base:
+        The base URL to make an auth request to.
+
+    """
+    @inlineCallbacks
+    def owner_factory(handler):
+        request = handler.request
+        uri = "".join([url_base.rstrip('/'), request.uri])
+        resp = yield treq.request(
+            request.method, uri, headers=request.headers, persistent=False)
+        [owner] = resp.headers.getRawHeaders('X-Owner-Id')
+        yield resp.content()  # Finish the request.
+        returnValue(owner)
+    return owner_factory
+
+
+def compose_deferred(f, g):
+    """
+    Compose two functions, ``f`` and ``g``, any of which may return a Deferred.
     """
     def h(*args, **kw):
         d = maybeDeferred(g, *args, **kw)
@@ -316,14 +339,36 @@ class ApiApplication(Application):
     An API for a set of collections and adhoc additional methods.
     """
 
+    config_required = False
+
     collections = ()
 
     collection_factory_preprocessor = staticmethod(
         owner_from_header('X-Owner-ID'))
 
-    def __init__(self, **settings):
+    def __init__(self, config_file=None, **settings):
+        if self.config_required and config_file is None:
+            raise ValueError(
+                "Please specify a config file using --appopts=<config.yaml>")
+        config = self.get_config_settings(config_file)
+        self.setup_collection_factory_preprocessor(config)
+        self.initialize(settings, config)
         routes = self._build_routes()
         Application.__init__(self, routes, **settings)
+
+    def initialize(self, settings, config):
+        """
+        Subclasses should override this to perform any application-level setup
+        they need.
+        """
+        pass
+
+    def setup_collection_factory_preprocessor(self, config):
+        # TODO: Better configuration mechanism than this.
+        auth_bouncer_url = config.get('auth_bouncer_url')
+        if auth_bouncer_url is not None:
+            self.collection_factory_preprocessor = (
+                owner_from_oauth2_bouncer(auth_bouncer_url))
 
     def get_config_settings(self, config_file=None):
         return read_yaml_config(config_file)
@@ -336,7 +381,7 @@ class ApiApplication(Application):
         routes = []
         for dfn, collection_factory in self.collections:
             if self.collection_factory_preprocessor is not None:
-                collection_factory = compose(
+                collection_factory = compose_deferred(
                     collection_factory, self.collection_factory_preprocessor)
             routes.extend((
                 CollectionHandler.mk_urlspec(dfn, collection_factory),
