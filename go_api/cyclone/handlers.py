@@ -38,6 +38,11 @@ def create_urlspec_regex(dfn, *args, **kw):
     return "/".join(parts)
 
 
+class HealthHandler(RequestHandler):
+    def get(self, *args, **kw):
+        self.write("OK")
+
+
 class BaseHandler(RequestHandler):
     """
     Base class for utility methods for :class:`CollectionHandler`
@@ -386,7 +391,7 @@ class ApiApplication(Application):
         Build up routes for handlers from collections and
         extra routes.
         """
-        routes = []
+        routes = [URLSpec('/health/', HealthHandler)]
         for dfn, collection_factory in self.collections:
             if self.collection_factory_preprocessor is not None:
                 collection_factory = compose_deferred(

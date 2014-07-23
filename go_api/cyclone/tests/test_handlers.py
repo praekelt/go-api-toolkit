@@ -418,6 +418,14 @@ class TestApiApplication(TestCase):
         return AppHelper(MyApiApplication())
 
     @inlineCallbacks
+    def test_process_request_health_check(self):
+        app_helper = self.get_app_helper()
+        result = yield app_helper.request('GET', '/health/')
+        content = yield result.content()
+        self.assertEqual(result.code, 200)
+        self.assertEqual(content, "OK")
+
+    @inlineCallbacks
     def test_process_request_default_preprocessor(self):
         collection_data = {'foo': {'id': 'foo'}}
         collection_factory = self.get_collection_factory(collection_data)
@@ -474,7 +482,8 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=None)
-        [collection_route, elem_route] = app_helper.app.handlers[0][1]
+        routes = app_helper.app.handlers[0][1]
+        [_health_route, collection_route, elem_route] = routes
         self.assertEqual(collection_route.handler_class, CollectionHandler)
         self.assertEqual(collection_route.regex.pattern,
                          "/(?P<owner_id>[^/]*)/store$")
@@ -490,7 +499,7 @@ class TestApiApplication(TestCase):
 
     @inlineCallbacks
     def assert_handlers_get_owner(self, app, collection_name, **handler_kw):
-        [collection_route, elem_route] = app.handlers[0][1]
+        [_health_route, collection_route, elem_route] = app.handlers[0][1]
 
         handler = self.collection_helper.mk_handler(**handler_kw)
         collection_factory = collection_route.kwargs["collection_factory"]
