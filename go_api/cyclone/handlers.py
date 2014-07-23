@@ -276,7 +276,10 @@ def owner_from_header(header):
     an owner id instead of a :class:`RequestHandler`::
     """
     def owner_factory(handler):
-        return handler.request.headers[header]
+        owner = handler.request.headers.get(header)
+        if owner is None:
+            raise HTTPError(401)
+        return owner
     return owner_factory
 
 
@@ -289,7 +292,10 @@ def owner_from_path_kwarg(path_kwarg):
         The name of the path argument. E.g. ``owner_id``.
     """
     def owner_factory(handler):
-        return handler.path_kwargs[path_kwarg]
+        owner = handler.path_kwargs.get(path_kwarg)
+        if owner is None:
+            raise HTTPError(401)
+        return owner
     return owner_factory
 
 
@@ -309,7 +315,9 @@ def owner_from_oauth2_bouncer(url_base):
         resp = yield treq.request(
             request.method, uri, headers=request.headers, persistent=False)
         [owner] = resp.headers.getRawHeaders('X-Owner-Id')
-        yield resp.content()  # Finish the request.
+        yield resp.content()
+        if resp.code >= 400:
+            raise HTTPError(resp.code)
         returnValue(owner)
     return owner_factory
 
