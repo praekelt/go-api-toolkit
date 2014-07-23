@@ -38,6 +38,11 @@ def create_urlspec_regex(dfn, *args, **kw):
     return "/".join(parts)
 
 
+class HealthHandler(RequestHandler):
+    def get(self, *args, **kw):
+        self.write("OK")
+
+
 class BaseHandler(RequestHandler):
     """
     Base class for utility methods for :class:`CollectionHandler`
@@ -276,7 +281,10 @@ def owner_from_header(header):
     an owner id instead of a :class:`RequestHandler`::
     """
     def owner_factory(handler):
-        return handler.request.headers[header]
+        owner = handler.request.headers.get(header)
+        if owner is None:
+            raise HTTPError(401)
+        return owner
     return owner_factory
 
 
@@ -289,7 +297,10 @@ def owner_from_path_kwarg(path_kwarg):
         The name of the path argument. E.g. ``owner_id``.
     """
     def owner_factory(handler):
-        return handler.path_kwargs[path_kwarg]
+        owner = handler.path_kwargs.get(path_kwarg)
+        if owner is None:
+            raise HTTPError(401)
+        return owner
     return owner_factory
 
 
@@ -309,7 +320,9 @@ def owner_from_oauth2_bouncer(url_base):
         resp = yield treq.request(
             request.method, uri, headers=request.headers, persistent=False)
         [owner] = resp.headers.getRawHeaders('X-Owner-Id')
-        yield resp.content()  # Finish the request.
+        yield resp.content()
+        if resp.code >= 400:
+            raise HTTPError(resp.code)
         returnValue(owner)
     return owner_factory
 
@@ -378,7 +391,7 @@ class ApiApplication(Application):
         Build up routes for handlers from collections and
         extra routes.
         """
-        routes = []
+        routes = [URLSpec('/health/', HealthHandler)]
         for dfn, collection_factory in self.collections:
             if self.collection_factory_preprocessor is not None:
                 collection_factory = compose_deferred(

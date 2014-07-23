@@ -59,7 +59,7 @@ class HandlerHelper(object):
         handler = self.handler_cls(
             app, request, **self.handler_kwargs)
         handler.path_args = path_args
-        handler.path_kwargs = path_kwargs
+        handler.path_kwargs = path_kwargs or {}
         return handler
 
 
