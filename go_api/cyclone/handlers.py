@@ -366,7 +366,8 @@ class ApiApplication(Application):
         config = self.get_config_settings(config_file)
         self.setup_collection_factory_preprocessor(config)
         self.initialize(settings, config)
-        routes = self._build_routes()
+        path_prefix = self._get_configured_path_prefix(config)
+        routes = self._build_routes(path_prefix)
         Application.__init__(self, routes, **settings)
 
     def initialize(self, settings, config):
@@ -386,13 +387,18 @@ class ApiApplication(Application):
     def get_config_settings(self, config_file=None):
         return read_yaml_config(config_file)
 
-    def _build_routes(self):
+    def _get_configured_path_prefix(self, config):
+        prefix = config.get('url_path_prefix')
+        return prefix or ""
+
+    def _build_routes(self, path_prefix=""):
         """
         Build up routes for handlers from collections and
         extra routes.
         """
         routes = [URLSpec('/health/', HealthHandler)]
         for dfn, collection_factory in self.collections:
+            dfn = "/".join([path_prefix.rstrip("/"), dfn.lstrip("/")])
             if self.collection_factory_preprocessor is not None:
                 collection_factory = compose_deferred(
                     collection_factory, self.collection_factory_preprocessor)

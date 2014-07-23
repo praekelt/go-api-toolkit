@@ -407,7 +407,8 @@ class TestApiApplication(TestCase):
 
     def get_app_helper(self, collections=ApiApplication.collections,
                        preprocessor=(
-                           ApiApplication.collection_factory_preprocessor)):
+                           ApiApplication.collection_factory_preprocessor),
+                       config=None):
         class MyApiApplication(ApiApplication):
             pass
 
@@ -415,7 +416,7 @@ class TestApiApplication(TestCase):
         if callable(preprocessor):
             preprocessor = staticmethod(preprocessor)
         MyApiApplication.collection_factory_preprocessor = preprocessor
-        return AppHelper(MyApiApplication())
+        return AppHelper(MyApiApplication(config))
 
     @inlineCallbacks
     def test_process_request_health_check(self):
@@ -624,6 +625,45 @@ class TestApiApplication(TestCase):
         self.assertEqual(
             app.collection_factory_preprocessor,
             ApiApplication.collection_factory_preprocessor)
+
+    def test_configure_url_path_prefix(self):
+        config_dict = {'url_path_prefix': '/foo/bar'}
+
+        # Trial cleans this up for us.
+        tempfile = self.mktemp()
+        with open(tempfile, 'wb') as fp:
+            yaml.safe_dump(config_dict, fp)
+
+        collection_factory = self.get_collection_factory({})
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            config=tempfile)
+
+        [health, collection, element] = app_helper.app.handlers[0][1]
+        # No prefix for the health URL path.
+        self.assertEqual(health.regex.pattern, r'/health/$')
+        # We should have the prefix on the front of our other URL paths.
+        self.assertEqual(
+            collection.regex.pattern,
+            r'/foo/bar/(?P<owner_id>[^/]*)/store$')
+        self.assertEqual(
+            element.regex.pattern,
+            r'/foo/bar/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
+
+    def test_no_url_path_prefix(self):
+        collection_factory = self.get_collection_factory({})
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),))
+
+        [health, collection, element] = app_helper.app.handlers[0][1]
+
+        self.assertEqual(health.regex.pattern, r'/health/$')
+        self.assertEqual(
+            collection.regex.pattern,
+            r'/(?P<owner_id>[^/]*)/store$')
+        self.assertEqual(
+            element.regex.pattern,
+            r'/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
 
 
 class TestAuthHandlers(TestCase):
