@@ -704,10 +704,11 @@ class TestAuthHandlers(TestCase):
         self._cleanup_funcs.append(func)
 
     @inlineCallbacks
-    def start_fake_auth_server(self, owner_id, code=200):
+    def start_fake_auth_server(self, owner_id=None, code=200):
         def auth_request(request):
             request.setResponseCode(code)
-            request.setHeader("X-Owner-Id", owner_id)
+            if owner_id is not None:
+                request.setHeader("X-Owner-Id", owner_id)
             return ""
         fake_server = MockHttpServer(auth_request)
         yield fake_server.start()
@@ -758,7 +759,7 @@ class TestAuthHandlers(TestCase):
 
     @inlineCallbacks
     def test_owner_from_bouncer_without_value(self):
-        auth_server = yield self.start_fake_auth_server("owner-1", 401)
+        auth_server = yield self.start_fake_auth_server(code=401)
         preprocessor = owner_from_oauth2_bouncer(auth_server.url)
         handler = self.dummy_helper.mk_handler()
         err = yield self.assertFailure(preprocessor(handler), HTTPError)
@@ -766,7 +767,7 @@ class TestAuthHandlers(TestCase):
 
     @inlineCallbacks
     def test_owner_from_bouncer_with_invalid_value(self):
-        auth_server = yield self.start_fake_auth_server("owner-1", 403)
+        auth_server = yield self.start_fake_auth_server(code=403)
         preprocessor = owner_from_oauth2_bouncer(auth_server.url)
         handler = self.dummy_helper.mk_handler(
             headers={"Authorization": "Bearer foo"})

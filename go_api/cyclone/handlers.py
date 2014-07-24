@@ -321,10 +321,10 @@ def owner_from_oauth2_bouncer(url_base):
         uri = "".join([url_base.rstrip('/'), request.uri])
         resp = yield treq.request(
             request.method, uri, headers=request.headers, persistent=False)
-        [owner] = resp.headers.getRawHeaders('X-Owner-Id')
         yield resp.content()
         if resp.code >= 400:
             raise HTTPError(resp.code)
+        [owner] = resp.headers.getRawHeaders('X-Owner-Id')
         returnValue(owner)
     return owner_factory
 
