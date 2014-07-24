@@ -408,7 +408,7 @@ class TestApiApplication(TestCase):
     def get_app_helper(self, collections=ApiApplication.collections,
                        preprocessor=(
                            ApiApplication.collection_factory_preprocessor),
-                       config=None):
+                       config=None, extra_settings=None):
         class MyApiApplication(ApiApplication):
             pass
 
@@ -416,7 +416,9 @@ class TestApiApplication(TestCase):
         if callable(preprocessor):
             preprocessor = staticmethod(preprocessor)
         MyApiApplication.collection_factory_preprocessor = preprocessor
-        return AppHelper(MyApiApplication(config))
+        if extra_settings is None:
+            extra_settings = {}
+        return AppHelper(MyApiApplication(config, **extra_settings))
 
     @inlineCallbacks
     def test_process_request_health_check(self):
@@ -665,6 +667,24 @@ class TestApiApplication(TestCase):
             element.regex.pattern,
             r'/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
 
+    @inlineCallbacks
+    def test_handler_log_suppression(self):
+        handler_logs = []
+        collection_factory = self.get_collection_factory({})
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            extra_settings={'log_function': handler_logs.append})
+
+        # The collection handler should use default logging behaviour.
+        handler_logs[:] = []  # Clear logs.
+        yield app_helper.get('/foo/store')
+        self.assertEqual(len(handler_logs), 1)
+
+        # The health check handler should suppress logging.
+        handler_logs[:] = []  # Clear logs.
+        yield app_helper.get('/health/')
+        self.assertEqual(len(handler_logs), 0)
+
 
 class TestAuthHandlers(TestCase):
     def setUp(self):
@@ -684,10 +704,11 @@ class TestAuthHandlers(TestCase):
         self._cleanup_funcs.append(func)
 
     @inlineCallbacks
-    def start_fake_auth_server(self, owner_id, code=200):
+    def start_fake_auth_server(self, owner_id=None, code=200):
         def auth_request(request):
             request.setResponseCode(code)
-            request.setHeader("X-Owner-Id", owner_id)
+            if owner_id is not None:
+                request.setHeader("X-Owner-Id", owner_id)
             return ""
         fake_server = MockHttpServer(auth_request)
         yield fake_server.start()
@@ -738,7 +759,7 @@ class TestAuthHandlers(TestCase):
 
     @inlineCallbacks
     def test_owner_from_bouncer_without_value(self):
-        auth_server = yield self.start_fake_auth_server("owner-1", 401)
+        auth_server = yield self.start_fake_auth_server(code=401)
         preprocessor = owner_from_oauth2_bouncer(auth_server.url)
         handler = self.dummy_helper.mk_handler()
         err = yield self.assertFailure(preprocessor(handler), HTTPError)
@@ -746,7 +767,7 @@ class TestAuthHandlers(TestCase):
 
     @inlineCallbacks
     def test_owner_from_bouncer_with_invalid_value(self):
-        auth_server = yield self.start_fake_auth_server("owner-1", 403)
+        auth_server = yield self.start_fake_auth_server(code=403)
         preprocessor = owner_from_oauth2_bouncer(auth_server.url)
         handler = self.dummy_helper.mk_handler(
             headers={"Authorization": "Bearer foo"})
