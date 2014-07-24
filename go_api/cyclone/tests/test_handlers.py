@@ -408,7 +408,7 @@ class TestApiApplication(TestCase):
     def get_app_helper(self, collections=ApiApplication.collections,
                        preprocessor=(
                            ApiApplication.collection_factory_preprocessor),
-                       config=None):
+                       config=None, extra_settings=None):
         class MyApiApplication(ApiApplication):
             pass
 
@@ -416,7 +416,9 @@ class TestApiApplication(TestCase):
         if callable(preprocessor):
             preprocessor = staticmethod(preprocessor)
         MyApiApplication.collection_factory_preprocessor = preprocessor
-        return AppHelper(MyApiApplication(config))
+        if extra_settings is None:
+            extra_settings = {}
+        return AppHelper(MyApiApplication(config, **extra_settings))
 
     @inlineCallbacks
     def test_process_request_health_check(self):
@@ -664,6 +666,24 @@ class TestApiApplication(TestCase):
         self.assertEqual(
             element.regex.pattern,
             r'/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
+
+    @inlineCallbacks
+    def test_handler_log_suppression(self):
+        handler_logs = []
+        collection_factory = self.get_collection_factory({})
+        app_helper = self.get_app_helper(
+            collections=(('/:owner_id/store', collection_factory),),
+            extra_settings={'log_function': handler_logs.append})
+
+        # The collection handler should use default logging behaviour.
+        handler_logs[:] = []  # Clear logs.
+        yield app_helper.get('/foo/store')
+        self.assertEqual(len(handler_logs), 1)
+
+        # The health check handler should suppress logging.
+        handler_logs[:] = []  # Clear logs.
+        yield app_helper.get('/health/')
+        self.assertEqual(len(handler_logs), 0)
 
 
 class TestAuthHandlers(TestCase):

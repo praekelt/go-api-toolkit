@@ -39,6 +39,8 @@ def create_urlspec_regex(dfn, *args, **kw):
 
 
 class HealthHandler(RequestHandler):
+    suppress_request_log = True
+
     def get(self, *args, **kw):
         self.write("OK")
 
@@ -407,3 +409,10 @@ class ApiApplication(Application):
                 ElementHandler.mk_urlspec(dfn, collection_factory),
             ))
         return routes
+
+    def log_request(self, handler):
+        if getattr(handler, 'suppress_request_log', False):
+            # The handler doesn't want to be logged, so we're done.
+            return
+
+        return Application.log_request(self, handler)
