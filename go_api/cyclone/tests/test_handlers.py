@@ -175,7 +175,7 @@ class TestCollectionHandler(BaseHandlerTestCase):
         self.assertEqual(urlspec.kwargs, {
             "collection_factory": self.collection_factory,
         })
-        self.assertEqual(urlspec.regex.pattern, '/root$')
+        self.assertEqual(urlspec.regex.pattern, '/root/$')
 
     def test_initialize(self):
         handler = self.handler_helper.mk_handler()
@@ -188,20 +188,20 @@ class TestCollectionHandler(BaseHandlerTestCase):
 
     @inlineCallbacks
     def test_get(self):
-        data = yield self.app_helper.get('/root', parser='json_lines')
+        data = yield self.app_helper.get('/root/', parser='json_lines')
         self.assertEqual(data, [{"id": "obj1"}, {"id": "obj2"}])
 
     @inlineCallbacks
     def test_get_usage_error(self):
         self.collection.all = raise_usage_error
-        resp = yield self.app_helper.get('/root')
+        resp = yield self.app_helper.get('/root/')
         yield self.check_error_response(
             resp, 400, "Do not push the red button")
 
     @inlineCallbacks
     def test_get_server_error(self):
         self.collection.all = raise_dummy_error
-        resp = yield self.app_helper.get('/root')
+        resp = yield self.app_helper.get('/root/')
         yield self.check_error_response(
             resp, 500, "Failed to retrieve objects.")
         [f] = self.flushLoggedErrors(DummyError)
@@ -210,7 +210,7 @@ class TestCollectionHandler(BaseHandlerTestCase):
     @inlineCallbacks
     def test_post(self):
         data = yield self.app_helper.post(
-            '/root', data=json.dumps({"foo": "bar"}), parser='json')
+            '/root/', data=json.dumps({"foo": "bar"}), parser='json')
         object_id = data["id"]
         self.assertEqual(data, {"foo": "bar", "id": object_id})
         self.assertEqual(
@@ -221,7 +221,7 @@ class TestCollectionHandler(BaseHandlerTestCase):
     def test_post_usage_error(self):
         self.collection.create = raise_usage_error
         resp = yield self.app_helper.post(
-            '/root', data=json.dumps({"foo": "bar"}))
+            '/root/', data=json.dumps({"foo": "bar"}))
         yield self.check_error_response(
             resp, 400, "Do not push the red button")
 
@@ -229,7 +229,7 @@ class TestCollectionHandler(BaseHandlerTestCase):
     def test_post_server_error(self):
         self.collection.create = raise_dummy_error
         resp = yield self.app_helper.post(
-            '/root', data=json.dumps({"foo": "bar"}))
+            '/root/', data=json.dumps({"foo": "bar"}))
         yield self.check_error_response(
             resp, 500, "Failed to create object.")
         [f] = self.flushLoggedErrors(DummyError)
@@ -435,7 +435,7 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),))
         result = yield app_helper.request(
-            'GET', '/foo/store', headers={"X-Owner-ID": "owner-1"})
+            'GET', '/foo/store/', headers={"X-Owner-ID": "owner-1"})
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 
@@ -446,7 +446,7 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=None)
-        result = yield app_helper.request('GET', '/foo/store')
+        result = yield app_helper.request('GET', '/foo/store/')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 
@@ -457,7 +457,7 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=lambda handler: succeed("owner-1"))
-        result = yield app_helper.request('GET', '/foo/store')
+        result = yield app_helper.request('GET', '/foo/store/')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 
@@ -469,7 +469,7 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=owner_from_oauth2_bouncer(auth_server.url))
-        result = yield app_helper.request('GET', '/foo/store')
+        result = yield app_helper.request('GET', '/foo/store/')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 
@@ -489,7 +489,7 @@ class TestApiApplication(TestCase):
         [_health_route, collection_route, elem_route] = routes
         self.assertEqual(collection_route.handler_class, CollectionHandler)
         self.assertEqual(collection_route.regex.pattern,
-                         "/(?P<owner_id>[^/]*)/store$")
+                         "/(?P<owner_id>[^/]*)/store/$")
         self.assertEqual(collection_route.kwargs, {
             "collection_factory": collection_factory,
         })
@@ -647,7 +647,7 @@ class TestApiApplication(TestCase):
         # We should have the prefix on the front of our other URL paths.
         self.assertEqual(
             collection.regex.pattern,
-            r'/foo/bar/(?P<owner_id>[^/]*)/store$')
+            r'/foo/bar/(?P<owner_id>[^/]*)/store/$')
         self.assertEqual(
             element.regex.pattern,
             r'/foo/bar/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
@@ -662,7 +662,7 @@ class TestApiApplication(TestCase):
         self.assertEqual(health.regex.pattern, r'/health/$')
         self.assertEqual(
             collection.regex.pattern,
-            r'/(?P<owner_id>[^/]*)/store$')
+            r'/(?P<owner_id>[^/]*)/store/$')
         self.assertEqual(
             element.regex.pattern,
             r'/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
@@ -677,7 +677,7 @@ class TestApiApplication(TestCase):
 
         # The collection handler should use default logging behaviour.
         handler_logs[:] = []  # Clear logs.
-        yield app_helper.get('/foo/store')
+        yield app_helper.get('/foo/store/')
         self.assertEqual(len(handler_logs), 1)
 
         # The health check handler should suppress logging.

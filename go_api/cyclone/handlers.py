@@ -160,7 +160,7 @@ class CollectionHandler(BaseHandler):
             returns an :class:`ICollection`. The collection_factory is
             called during ``RequestHandler.prepare``.
         """
-        return URLSpec(create_urlspec_regex(dfn), cls,
+        return URLSpec(create_urlspec_regex(dfn + "/"), cls,
                        kwargs={"collection_factory": collection_factory})
 
     def initialize(self, collection_factory):
