@@ -1,5 +1,6 @@
 import json
 
+import treq
 import yaml
 
 from twisted.trial.unittest import TestCase
@@ -706,6 +707,9 @@ class TestAuthHandlers(TestCase):
     @inlineCallbacks
     def start_fake_auth_server(self, owner_id=None, code=200):
         def auth_request(request):
+            if request.method != "GET":
+                request.setResponseCode(405)
+                return ""
             request.setResponseCode(code)
             if owner_id is not None:
                 request.setHeader("X-Owner-Id", owner_id)
@@ -721,6 +725,22 @@ class TestAuthHandlers(TestCase):
         call it.
         """
         raise Exception("This collection_factory should never be called")
+
+    @inlineCallbacks
+    def test_fake_auth_server_rejects_post(self):
+        """
+        Test that the fake auth server rejects non-GET requests.
+
+        This is important for :meth:`test_owner_from_bouncer_post` below which
+        should fail if the bouncer preprocesser makes a non-POST request.
+        """
+        auth_server = yield self.start_fake_auth_server()
+        # Accepts GET
+        resp = yield treq.get(auth_server.url, persistent=False)
+        self.assertEqual(resp.code, 200)
+        # Rejects POST
+        resp = yield treq.post(auth_server.url, persistent=False)
+        self.assertEqual(resp.code, 405)
 
     def test_owner_from_header_with_value(self):
         preprocessor = owner_from_header("X-Owner-Id")
@@ -754,6 +774,16 @@ class TestAuthHandlers(TestCase):
         preprocessor = owner_from_oauth2_bouncer(auth_server.url)
         handler = self.dummy_helper.mk_handler(
             headers={"Authorization": "Bearer foo"})
+        owner_id = yield preprocessor(handler)
+        self.assertEqual(owner_id, "owner-1")
+
+    @inlineCallbacks
+    def test_owner_from_bouncer_post(self):
+        auth_server = yield self.start_fake_auth_server("owner-1")
+        preprocessor = owner_from_oauth2_bouncer(auth_server.url)
+        handler = self.dummy_helper.mk_handler(
+            headers={"Authorization": "Bearer foo"})
+        handler.request.method = "POST"
         owner_id = yield preprocessor(handler)
         self.assertEqual(owner_id, "owner-1")
 
