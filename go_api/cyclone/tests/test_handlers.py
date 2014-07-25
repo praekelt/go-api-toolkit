@@ -728,6 +728,12 @@ class TestAuthHandlers(TestCase):
 
     @inlineCallbacks
     def test_fake_auth_server_rejects_post(self):
+        """
+        Test that the fake auth server rejects non-GET requests.
+
+        This is important for :meth:`test_owner_from_bouncer_post` below which
+        should fail if the bouncer preprocesser makes a non-POST request.
+        """
         auth_server = yield self.start_fake_auth_server()
         # Accepts GET
         resp = yield treq.get(auth_server.url, persistent=False)
