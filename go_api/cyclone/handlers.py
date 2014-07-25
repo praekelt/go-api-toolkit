@@ -319,8 +319,10 @@ def owner_from_oauth2_bouncer(url_base):
     def owner_factory(handler):
         request = handler.request
         uri = "".join([url_base.rstrip('/'), request.uri])
-        resp = yield treq.request(
-            request.method, uri, headers=request.headers, persistent=False)
+        auth_headers = {}
+        if 'Authorization' in request.headers:
+            auth_headers['Authorization'] = request.headers['Authorization']
+        resp = yield treq.get(uri, headers=auth_headers, persistent=False)
         yield resp.content()
         if resp.code >= 400:
             raise HTTPError(resp.code)
