@@ -282,7 +282,7 @@ class TestElementHandler(BaseHandlerTestCase):
     def test_get_missing_object(self):
         resp = yield self.app_helper.get('/root/missing1')
         yield self.check_error_response(
-            resp, 404, "Object u'missing1' not found.")
+            resp, 404, "Object 'missing1' not found.")
 
     @inlineCallbacks
     def test_get_usage_error(self):
@@ -296,7 +296,7 @@ class TestElementHandler(BaseHandlerTestCase):
         self.collection.get = raise_dummy_error
         resp = yield self.app_helper.get('/root/obj1')
         yield self.check_error_response(
-            resp, 500, "Failed to retrieve u'obj1'")
+            resp, 500, "Failed to retrieve 'obj1'")
         [f] = self.flushLoggedErrors(DummyError)
         self.assertEqual(str(f.value), "You pushed the red button")
 
@@ -317,7 +317,7 @@ class TestElementHandler(BaseHandlerTestCase):
         resp = yield self.app_helper.put(
             '/root/missing1', data=json.dumps({"id": "missing1"}))
         yield self.check_error_response(
-            resp, 404, "Object u'missing1' not found.")
+            resp, 404, "Object 'missing1' not found.")
 
     @inlineCallbacks
     def test_put_usage_error(self):
@@ -333,7 +333,7 @@ class TestElementHandler(BaseHandlerTestCase):
         resp = yield self.app_helper.put(
             '/root/obj2', data=json.dumps({"id": "obj2", "foo": "bar"}))
         yield self.check_error_response(
-            resp, 500, "Failed to update u'obj2'")
+            resp, 500, "Failed to update 'obj2'")
         [f] = self.flushLoggedErrors(DummyError)
         self.assertEqual(str(f.value), "You pushed the red button")
 
@@ -349,7 +349,7 @@ class TestElementHandler(BaseHandlerTestCase):
     def test_delete_missing_object(self):
         resp = yield self.app_helper.delete('/root/missing1')
         yield self.check_error_response(
-            resp, 404, "Object u'missing1' not found.")
+            resp, 404, "Object 'missing1' not found.")
 
     @inlineCallbacks
     def test_delete_usage_error(self):
@@ -363,7 +363,7 @@ class TestElementHandler(BaseHandlerTestCase):
         self.collection.delete = raise_dummy_error
         resp = yield self.app_helper.delete('/root/obj1')
         yield self.check_error_response(
-            resp, 500, "Failed to delete u'obj1'")
+            resp, 500, "Failed to delete 'obj1'")
         [f] = self.flushLoggedErrors(DummyError)
         self.assertEqual(str(f.value), "You pushed the red button")
 
