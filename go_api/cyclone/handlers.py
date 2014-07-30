@@ -230,7 +230,7 @@ class ElementHandler(BaseHandler):
 
     @inlineCallbacks
     def prepare(self):
-        self.elem_id = self.path_kwargs['elem_id']
+        self.elem_id = self.path_kwargs['elem_id'].encode('utf-8')
         self.collection = yield self.collection_factory(self)
 
     def get(self, *args, **kw):
