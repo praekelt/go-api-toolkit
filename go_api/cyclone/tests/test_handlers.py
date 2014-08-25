@@ -206,6 +206,17 @@ class TestCollectionHandler(BaseHandlerTestCase):
         })
 
     @inlineCallbacks
+    def test_get_page_multiple(self):
+        data = yield self.app_helper.get('/root/?max_results=1', parser='json')
+        self.assertEqual(data[u'cursor'], 1)
+        self.assertEqual(data[u'data'], [{u'id': u'obj1'}])
+
+        data = yield self.app_helper.get('/root/?max_results=1&cursor=1',
+                                         parser='json')
+        self.assertEqual(data[u'cursor'], None)
+        self.assertEqual(data[u'data'], [{u'id': u'obj2'}])
+
+    @inlineCallbacks
     def test_get_usage_error(self):
         self.collection.page = raise_usage_error
         resp = yield self.app_helper.get('/root/')

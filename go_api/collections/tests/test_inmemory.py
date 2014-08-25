@@ -128,6 +128,26 @@ class TestInMemoryCollection(TestCase):
         self.assertEqual(page, [data])
 
     @inlineCallbacks
+    def test_page_multiple(self):
+        """
+        Listing a page of rows when all the rows doesn't fit on one page should
+        return a subset of rows with a reference to the next set of rows
+        """
+        collection = InMemoryCollection()
+        key1, data1 = yield collection.create(None, {'some': 'data'})
+        key1, data2 = yield collection.create(None, {'other': 'data'})
+        (pointer, page1) = yield collection.page(None, 1, None)
+        self.assertEqual(pointer, 1)
+
+        (pointer, page2) = yield collection.page(1, 1, None)
+        self.assertEqual(pointer, None)
+
+        pages = page1 + page2
+
+        self.assertTrue(data1 in pages)
+        self.assertTrue(data2 in pages)
+
+    @inlineCallbacks
     def test_get(self):
         collection = InMemoryCollection()
         key, data = yield collection.create(None, {"some": "data"})

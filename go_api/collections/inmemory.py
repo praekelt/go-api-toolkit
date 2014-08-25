@@ -69,12 +69,20 @@ class InMemoryCollection(object):
     def stream(self, query):
         return [self._get_data(object_id) for object_id in self._get_keys()]
 
+    @simulate_async
     def page(self, cursor, max_results, query):
-        # Note, will always return all data with None as reference. Collections
-        # should implement pagination and queries themselves.
+        # Default value of 5 for max_results
+        max_results = int(max_results) if max_results is not None else 5
+        # Default value of 0 for cursor
+        cursor = int(cursor) if cursor is not None else 0
+        keys = sorted(self._get_keys())
+        groups = [self._get_data(object_id) for object_id in
+                  keys[cursor:(cursor + max_results)]]
+        next_cursor = cursor + max_results
+        next_cursor = next_cursor if next_cursor < len(keys) else None
         return (
-            None,
-            [self._get_data(object_id) for object_id in self._get_keys()]
+            next_cursor,
+            groups,
         )
 
     @simulate_async
