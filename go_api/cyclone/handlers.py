@@ -134,9 +134,9 @@ class BaseHandler(RequestHandler):
         Write out a list of serialable objects into one page with a pointer to
         the next page.
 
-        :param list objs:
+        :param list objs[0]:
             List of dictionaries to write out.
-        :param string pointer:
+        :param string objs[1]:
             Pointer to set to get the next page
         """
         cursor = objs[0]
