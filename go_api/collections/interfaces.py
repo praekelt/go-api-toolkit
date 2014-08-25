@@ -17,6 +17,10 @@ class ICollection(Interface):
         Return an iterable over all objects in the collection. The iterable may
         contain deferreds instead of objects. May return a deferred instead of
         the iterable.
+
+        :param unicode query:
+            Search term requested through the API. Defaults to ``None`` if no
+            search term was requested.
         """
 
     def page(cursor, max_results, query):
@@ -24,7 +28,17 @@ class ICollection(Interface):
         Return (cursor, data), where cursor is a string that refers to the
         next page, and data is an interable over all objects within the page.
         The iterable may contain deferreds instead of objects. May return a
-        deffered instead of the iterable
+        deferred instead of the iterable
+
+        :param unicode cursor:
+            Used to determine the start point of the page. Defaults to ``None``
+            if no cursor was supplied.
+        :param unicode max_results:
+            Used to limit the number of results presented in a page. Defaults
+            to ``None`` if no limit was specified.
+        :param unicode query:
+            Search term requested through the API. Defaults to ``None`` if no
+            search term was requested.
         """
 
     def get(object_id):
