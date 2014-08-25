@@ -188,20 +188,33 @@ class TestCollectionHandler(BaseHandlerTestCase):
         self.assertEqual(handler.collection, self.collection)
 
     @inlineCallbacks
-    def test_get(self):
-        data = yield self.app_helper.get('/root/', parser='json_lines')
+    def test_get_stream(self):
+        data = yield self.app_helper.get('/root/?stream=true',
+                                         parser='json_lines')
         self.assertEqual(data, [{"id": "obj1"}, {"id": "obj2"}])
 
     @inlineCallbacks
+    def test_get_page(self):
+        data = yield self.app_helper.get('/root/',
+                                         parser='json')
+        self.assertEqual(data, {
+            u'cursor': None,
+            u'data': [
+                {u'id': u'obj1'},
+                {u'id': u'obj2'},
+            ],
+        })
+
+    @inlineCallbacks
     def test_get_usage_error(self):
-        self.collection.all = raise_usage_error
+        self.collection.page = raise_usage_error
         resp = yield self.app_helper.get('/root/')
         yield self.check_error_response(
             resp, 400, "Do not push the red button")
 
     @inlineCallbacks
     def test_get_server_error(self):
-        self.collection.all = raise_dummy_error
+        self.collection.page = raise_dummy_error
         resp = yield self.app_helper.get('/root/')
         yield self.check_error_response(
             resp, 500, "Failed to retrieve objects.")
@@ -436,7 +449,8 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),))
         result = yield app_helper.request(
-            'GET', '/foo/store/', headers={"X-Owner-ID": "owner-1"})
+            'GET', '/foo/store/?stream=true',
+            headers={"X-Owner-ID": "owner-1"})
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 
@@ -447,7 +461,7 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=None)
-        result = yield app_helper.request('GET', '/foo/store/')
+        result = yield app_helper.request('GET', '/foo/store/?stream=true')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 
@@ -458,7 +472,7 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=lambda handler: succeed("owner-1"))
-        result = yield app_helper.request('GET', '/foo/store/')
+        result = yield app_helper.request('GET', '/foo/store/?stream=true')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 
@@ -470,7 +484,7 @@ class TestApiApplication(TestCase):
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', collection_factory),),
             preprocessor=owner_from_oauth2_bouncer(auth_server.url))
-        result = yield app_helper.request('GET', '/foo/store/')
+        result = yield app_helper.request('GET', '/foo/store/?stream=true')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
 

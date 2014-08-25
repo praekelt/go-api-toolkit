@@ -12,11 +12,19 @@ class ICollection(Interface):
         deferred instead of the iterable.
         """
 
-    def all():
+    def stream(query):
         """
         Return an iterable over all objects in the collection. The iterable may
         contain deferreds instead of objects. May return a deferred instead of
         the iterable.
+        """
+
+    def page(cursor, max_results, query):
+        """
+        Return (cursor, data), where cursor is a string that refers to the
+        next page, and data is an interable over all objects within the page.
+        The iterable may contain deferreds instead of objects. May return a
+        deffered instead of the iterable
         """
 
     def get(object_id):

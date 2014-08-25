@@ -66,8 +66,16 @@ class InMemoryCollection(object):
         return self._get_keys()
 
     @simulate_async
-    def all(self):
+    def stream(self, query):
         return [self._get_data(object_id) for object_id in self._get_keys()]
+
+    def page(self, cursor, max_results, query):
+        # Note, will always return all data with None as reference. Collections
+        # should implement pagination and queries themselves.
+        return (
+            None,
+            [self._get_data(object_id) for object_id in self._get_keys()]
+        )
 
     @simulate_async
     def get(self, object_id):

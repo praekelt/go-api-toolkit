@@ -128,6 +128,30 @@ class BaseHandler(RequestHandler):
             yield self.write_object(obj)
             self.write("\n")
 
+    @inlineCallbacks
+    def write_page(self, objs):
+        """
+        Write out a list of serialable objects into one page with a pointer to
+        the next page.
+
+        :param list objs:
+            List of dictionaries to write out.
+        :param string pointer:
+            Pointer to set to get the next page
+        """
+        cursor = objs[0]
+        objs = objs[1]
+        objects = []
+        for obj_deferred in objs:
+            obj = yield obj_deferred
+            if obj is not None:
+                objects.append(obj)
+        page = {
+            'cursor': cursor,
+            'data': objects,
+        }
+        self.write(json.dumps(page))
+
 
 # TODO: Sort out response metadata and make responses follow a consistent
 #       pattern.
@@ -174,8 +198,19 @@ class CollectionHandler(BaseHandler):
         """
         Return all elements from a collection.
         """
-        d = maybeDeferred(self.collection.all)
-        d.addCallback(self.write_objects)
+        query = self.get_argument('query', default=None)
+        stream = self.get_argument('stream', default='false')
+        if stream == 'true':
+            d = maybeDeferred(self.collection.stream, query=query)
+            d.addCallback(self.write_objects)
+        else:
+            cursor = self.get_argument('cursor', default=None)
+            max_results = self.get_argument('max_results', default=None)
+            d = maybeDeferred(
+                self.collection.page, cursor=cursor,
+                max_results=max_results, query=query)
+            d.addCallback(self.write_page)
+
         d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500, "Failed to retrieve objects.")
         return d
