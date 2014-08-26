@@ -41,10 +41,8 @@ class ICollection(Interface):
         :return tuple (cursor, data):
         :return opaque_string cursor:
             Refers to the next page. ``None`` if this is the last page.
-        :return deferred_or_iterable data:
-            Iterable over all objects within the page. The iterable may contain
-            deferreds instead of objects. May return a deferred instead of the
-            iterable.
+        :return list data:
+            List of all the objects within the page.
         """
 
     def get(object_id):
