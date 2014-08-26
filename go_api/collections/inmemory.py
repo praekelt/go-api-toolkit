@@ -67,10 +67,14 @@ class InMemoryCollection(object):
 
     @simulate_async
     def stream(self, query):
+        if query is not None:
+            raise NotImplementedError
         return [self._get_data(object_id) for object_id in self._get_keys()]
 
     @simulate_async
     def page(self, cursor, max_results, query):
+        if query is not None:
+            raise NotImplementedError
         # Default value of 5 for max_results
         max_results = int(max_results) if max_results is not None else 5
         # Default value of 0 for cursor
