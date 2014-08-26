@@ -76,7 +76,7 @@ class InMemoryCollection(object):
         if query is not None:
             raise CollectionUsageError
         # Default value of 5 for max_results
-        max_results = int(max_results) if max_results is not None else 5
+        max_results = max_results if max_results is not None else 5
         # Default value of 0 for cursor
         cursor = int(cursor) if cursor is not None else 0
         keys = sorted(self._get_keys())

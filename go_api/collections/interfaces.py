@@ -31,7 +31,7 @@ class ICollection(Interface):
         :param unicode cursor:
             Used to determine the start point of the page. Defaults to ``None``
             if no cursor was supplied.
-        :param unicode max_results:
+        :param int max_results:
             Used to limit the number of results presented in a page. Defaults
             to ``None`` if no limit was specified.
         :param unicode query:

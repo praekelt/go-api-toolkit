@@ -129,15 +129,15 @@ class BaseHandler(RequestHandler):
             self.write("\n")
 
     @inlineCallbacks
-    def write_page(self, cursor, objs):
+    def write_page(self, objs):
         """
         Write out a list of serializable objects into one page with a pointer
         to the next page.
 
-        :param string cursor:
-            Pointer  to get the next page
-        :param list objs:
+        :param list objs[0]:
             List of dictionaries to write out.
+        :param string objs[1]:
+            Pointer to set to get the next page
         """
         cursor = objs[0]
         objs = objs[1]
@@ -206,6 +206,7 @@ class CollectionHandler(BaseHandler):
         else:
             cursor = self.get_argument('cursor', default=None)
             max_results = self.get_argument('max_results', default=None)
+            max_results = max_results and int(max_results)
             d = maybeDeferred(
                 self.collection.page, cursor=cursor,
                 max_results=max_results, query=query)
