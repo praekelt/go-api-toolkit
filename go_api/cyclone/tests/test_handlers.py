@@ -206,6 +206,14 @@ class TestCollectionHandler(BaseHandlerTestCase):
         })
 
     @inlineCallbacks
+    def test_get_page_bad_limit(self):
+        data = yield self.app_helper.get('/root/?max_results=a')
+        self.check_error_response(
+            data,
+            400,
+            "max_results must be an integer")
+
+    @inlineCallbacks
     def test_get_page_multiple(self):
         data = yield self.app_helper.get('/root/?max_results=1', parser='json')
         self.assertEqual(data[u'cursor'], 1)

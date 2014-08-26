@@ -199,7 +199,10 @@ class CollectionHandler(BaseHandler):
         else:
             cursor = self.get_argument('cursor', default=None)
             max_results = self.get_argument('max_results', default=None)
-            max_results = max_results and int(max_results)
+            try:
+                max_results = max_results and int(max_results)
+            except ValueError:
+                raise HTTPError(400, "max_results must be an integer")
             d = maybeDeferred(
                 self.collection.page, cursor=cursor,
                 max_results=max_results, query=query)
