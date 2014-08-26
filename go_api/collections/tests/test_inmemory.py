@@ -8,7 +8,8 @@ from twisted.internet.defer import (
 from zope.interface.verify import verifyObject
 
 from go_api.collections.errors import (
-    CollectionObjectNotFound, CollectionObjectAlreadyExists)
+    CollectionObjectNotFound, CollectionObjectAlreadyExists,
+    CollectionUsageError)
 from go_api.collections.inmemory import InMemoryCollection
 from go_api.collections.interfaces import ICollection
 
@@ -103,6 +104,15 @@ class TestInMemoryCollection(TestCase):
         all_data = yield self.filtered_stream(collection)
         self.assertEqual(all_data, [data])
 
+    def test_stream_with_query(self):
+        """
+        Calling the stream function with a query parameter should raise a
+        CollectionUsageError.
+        """
+        collection = InMemoryCollection()
+        self.failUnlessFailure(collection.stream('q'),
+                               CollectionUsageError)
+
     @inlineCallbacks
     def test_page_empty(self):
         """
@@ -146,6 +156,15 @@ class TestInMemoryCollection(TestCase):
 
         self.assertTrue(data1 in pages)
         self.assertTrue(data2 in pages)
+
+    def test_page_with_query(self):
+        """
+        Calling the page function with a query parameter should raise a
+        CollectionUsageError.
+        """
+        collection = InMemoryCollection()
+        self.failUnlessFailure(collection.page(0, 0, 'q'),
+                               CollectionUsageError)
 
     @inlineCallbacks
     def test_get(self):
