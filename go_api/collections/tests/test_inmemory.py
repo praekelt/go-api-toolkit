@@ -8,7 +8,8 @@ from twisted.internet.defer import (
 from zope.interface.verify import verifyObject
 
 from go_api.collections.errors import (
-    CollectionObjectNotFound, CollectionObjectAlreadyExists)
+    CollectionObjectNotFound, CollectionObjectAlreadyExists,
+    CollectionUsageError)
 from go_api.collections.inmemory import InMemoryCollection
 from go_api.collections.interfaces import ICollection
 
@@ -18,7 +19,7 @@ class TestInMemoryCollection(TestCase):
     Tests from the in-memory collection.
     """
 
-    def filtered_all(self, collection):
+    def filtered_stream(self, collection):
         """
         Get all objects in a collection. Some backends may have some index
         deletion lag, so we might need to filter the results. This
@@ -26,7 +27,7 @@ class TestInMemoryCollection(TestCase):
 
         This waits for all deferreds to fire before returning.
         """
-        d = collection.all()
+        d = collection.stream(query=None)
         d.addCallback(lambda objs: [maybeDeferred(lambda: o) for o in objs])
         d.addCallback(gatherResults)
         d.addCallback(lambda objs: [o for o in objs if o is not None])
@@ -84,24 +85,86 @@ class TestInMemoryCollection(TestCase):
         self.assertEqual(keys, [])
 
     @inlineCallbacks
-    def test_all_empty(self):
+    def test_stream_empty(self):
         """
         Listing all rows returns an empty list when no rows exist in the store.
         """
         collection = InMemoryCollection()
-        all_data = yield self.filtered_all(collection)
+        all_data = yield self.filtered_stream(collection)
         self.assertEqual(all_data, [])
 
     @inlineCallbacks
-    def test_all_not_empty(self):
+    def test_stream_not_empty(self):
         """
         Listing all rows returns a non-empty list when rows exist in the store.
         """
         collection = InMemoryCollection()
         key, data = yield collection.create(None, {})
 
-        all_data = yield self.filtered_all(collection)
+        all_data = yield self.filtered_stream(collection)
         self.assertEqual(all_data, [data])
+
+    def test_stream_with_query(self):
+        """
+        Calling the stream function with a query parameter should raise a
+        CollectionUsageError.
+        """
+        collection = InMemoryCollection()
+        self.failUnlessFailure(collection.stream('q'),
+                               CollectionUsageError)
+
+    @inlineCallbacks
+    def test_page_empty(self):
+        """
+        Listing a page of rows returns an empty list when no rows exist in the
+        store.
+        """
+        collection = InMemoryCollection()
+        (pointer, page) = yield collection.page(None, None, None)
+        self.assertEqual(pointer, None)
+        self.assertEqual(page, [])
+
+    @inlineCallbacks
+    def test_page_not_empty(self):
+        """
+        Listing a page of rows returns a non-empty list when rows exist in the
+        store.
+        """
+        collection = InMemoryCollection()
+        key, data = yield collection.create(None, {})
+
+        (pointer, page) = yield collection.page(None, None, None)
+        self.assertEqual(pointer, None)
+        self.assertEqual(page, [data])
+
+    @inlineCallbacks
+    def test_page_multiple(self):
+        """
+        Listing a page of rows when all the rows doesn't fit on one page should
+        return a subset of rows with a reference to the next set of rows
+        """
+        collection = InMemoryCollection()
+        key1, data1 = yield collection.create(None, {'some': 'data'})
+        key1, data2 = yield collection.create(None, {'other': 'data'})
+        (pointer, page1) = yield collection.page(None, 1, None)
+        self.assertEqual(pointer, 1)
+
+        (pointer, page2) = yield collection.page(1, 1, None)
+        self.assertEqual(pointer, None)
+
+        pages = page1 + page2
+
+        self.assertTrue(data1 in pages)
+        self.assertTrue(data2 in pages)
+
+    def test_page_with_query(self):
+        """
+        Calling the page function with a query parameter should raise a
+        CollectionUsageError.
+        """
+        collection = InMemoryCollection()
+        self.failUnlessFailure(collection.page(0, 0, 'q'),
+                               CollectionUsageError)
 
     @inlineCallbacks
     def test_get(self):

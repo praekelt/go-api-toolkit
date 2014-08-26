@@ -66,8 +66,29 @@ class InMemoryCollection(object):
         return self._get_keys()
 
     @simulate_async
-    def all(self):
+    def stream(self, query):
+        if query is not None:
+            raise CollectionUsageError(
+                'query parameter not supported by InMemoryCollection')
         return [self._get_data(object_id) for object_id in self._get_keys()]
+
+    @simulate_async
+    def page(self, cursor, max_results, query):
+        if query is not None:
+            raise CollectionUsageError(
+                'query parameter not supported by InMemoryCollection')
+        # Default value of 5 for max_results
+        max_results = max_results or 5
+        # Default value of 0 for cursor
+        cursor = int(cursor) if cursor else 0
+        keys = sorted(self._get_keys())
+        next_cursor = cursor + max_results
+        groups = map(self._get_data, keys[cursor:next_cursor])
+        next_cursor = next_cursor if next_cursor < len(keys) else None
+        return (
+            next_cursor,
+            groups,
+        )
 
     @simulate_async
     def get(self, object_id):

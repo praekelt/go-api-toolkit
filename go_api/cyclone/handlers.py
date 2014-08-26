@@ -116,7 +116,7 @@ class BaseHandler(RequestHandler):
     @inlineCallbacks
     def write_objects(self, objs):
         """
-        Write out a list of serialable objects as newline separated JSON.
+        Write out a list of serializable objects as newline separated JSON.
 
         :param list objs:
             List of dictionaries to write out.
@@ -127,6 +127,23 @@ class BaseHandler(RequestHandler):
                 continue
             yield self.write_object(obj)
             self.write("\n")
+
+    def write_page(self, result):
+        """
+        Write out a list of serializable objects into one page with a pointer
+        to the next page.
+
+        :param unicode result[0]:
+            Pointer to set to get the next page
+        :param list result[1]:
+            List of dictionaries to write out.
+        """
+        cursor, data = result
+        page = {
+            'cursor': cursor,
+            'data': data,
+        }
+        self.write(json.dumps(page))
 
 
 # TODO: Sort out response metadata and make responses follow a consistent
@@ -174,8 +191,23 @@ class CollectionHandler(BaseHandler):
         """
         Return all elements from a collection.
         """
-        d = maybeDeferred(self.collection.all)
-        d.addCallback(self.write_objects)
+        query = self.get_argument('query', default=None)
+        stream = self.get_argument('stream', default='false')
+        if stream == 'true':
+            d = maybeDeferred(self.collection.stream, query=query)
+            d.addCallback(self.write_objects)
+        else:
+            cursor = self.get_argument('cursor', default=None)
+            max_results = self.get_argument('max_results', default=None)
+            try:
+                max_results = max_results and int(max_results)
+            except ValueError:
+                raise HTTPError(400, "max_results must be an integer")
+            d = maybeDeferred(
+                self.collection.page, cursor=cursor,
+                max_results=max_results, query=query)
+            d.addCallback(self.write_page)
+
         d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500, "Failed to retrieve objects.")
         return d
