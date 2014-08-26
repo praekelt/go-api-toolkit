@@ -138,9 +138,10 @@ class BaseHandler(RequestHandler):
         :param list result[1]:
             List of dictionaries to write out.
         """
+        cursor, data = result
         page = {
-            'cursor': result[0],
-            'data': result[1],
+            'cursor': cursor,
+            'data': data,
         }
         self.write(json.dumps(page))
 
