@@ -76,9 +76,9 @@ class InMemoryCollection(object):
         # Default value of 0 for cursor
         cursor = int(cursor) if cursor is not None else 0
         keys = sorted(self._get_keys())
-        groups = [self._get_data(object_id) for object_id in
-                  keys[cursor:(cursor + max_results)]]
         next_cursor = cursor + max_results
+        groups = [self._get_data(object_id) for object_id in
+                  keys[cursor:next_cursor]]
         next_cursor = next_cursor if next_cursor < len(keys) else None
         return (
             next_cursor,
