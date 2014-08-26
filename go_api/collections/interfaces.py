@@ -38,11 +38,11 @@ class ICollection(Interface):
             Search term requested through the API. Defaults to ``None`` if no
             search term was requested.
 
-        :return tuple (cursor, data):
-        :return opaque_string cursor:
-            Refers to the next page. ``None`` if this is the last page.
-        :return list data:
-            List of all the objects within the page.
+        :return:
+            (cursor, data). ``cursor`` is an opaque string that refers to the
+            next page, and is ``None`` if this is the last page. ``data`` is a
+            list of all the objects within the page.
+        :rtype: tuple
         """
 
     def get(object_id):
