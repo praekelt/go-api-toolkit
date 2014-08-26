@@ -68,13 +68,15 @@ class InMemoryCollection(object):
     @simulate_async
     def stream(self, query):
         if query is not None:
-            raise CollectionUsageError()
+            raise CollectionUsageError(
+                'query parameter not supported by InMemoryCollection')
         return [self._get_data(object_id) for object_id in self._get_keys()]
 
     @simulate_async
     def page(self, cursor, max_results, query):
         if query is not None:
-            raise CollectionUsageError()
+            raise CollectionUsageError(
+                'query parameter not supported by InMemoryCollection')
         # Default value of 5 for max_results
         max_results = max_results or 5
         # Default value of 0 for cursor
