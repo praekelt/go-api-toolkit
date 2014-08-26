@@ -116,7 +116,7 @@ class BaseHandler(RequestHandler):
     @inlineCallbacks
     def write_objects(self, objs):
         """
-        Write out a list of serialable objects as newline separated JSON.
+        Write out a list of serializable objects as newline separated JSON.
 
         :param list objs:
             List of dictionaries to write out.
@@ -129,15 +129,15 @@ class BaseHandler(RequestHandler):
             self.write("\n")
 
     @inlineCallbacks
-    def write_page(self, objs):
+    def write_page(self, cursor, objs):
         """
-        Write out a list of serialable objects into one page with a pointer to
-        the next page.
+        Write out a list of serializable objects into one page with a pointer
+        to the next page.
 
-        :param list objs[0]:
+        :param string cursor:
+            Pointer  to get the next page
+        :param list objs:
             List of dictionaries to write out.
-        :param string objs[1]:
-            Pointer to set to get the next page
         """
         cursor = objs[0]
         objs = objs[1]
