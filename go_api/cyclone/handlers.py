@@ -129,21 +129,21 @@ class BaseHandler(RequestHandler):
             self.write("\n")
 
     @inlineCallbacks
-    def write_page(self, objs):
+    def write_page(self, result):
         """
         Write out a list of serializable objects into one page with a pointer
         to the next page.
 
-        :param list objs[0]:
+        :param list result[0]:
             List of dictionaries to write out.
-        :param string objs[1]:
+        :param string result[1]:
             Pointer to set to get the next page
         """
-        cursor = objs[0]
-        objs = objs[1]
+        cursor = result[0]
+        result = result[1]
         objects = []
-        for obj_deferred in objs:
-            obj = yield obj_deferred
+        for object_deferred in result:
+            obj = yield object_deferred
             if obj is not None:
                 objects.append(obj)
         page = {
