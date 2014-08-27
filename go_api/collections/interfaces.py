@@ -12,11 +12,37 @@ class ICollection(Interface):
         deferred instead of the iterable.
         """
 
-    def all():
+    def stream(query):
         """
         Return an iterable over all objects in the collection. The iterable may
         contain deferreds instead of objects. May return a deferred instead of
         the iterable.
+
+        :param unicode query:
+            Search term requested through the API. Defaults to ``None`` if no
+            search term was requested.
+        """
+
+    def page(cursor, max_results, query):
+        """
+        Generages a page which contains a subset of the objects in the
+        collection.
+
+        :param unicode cursor:
+            Used to determine the start point of the page. Defaults to ``None``
+            if no cursor was supplied.
+        :param int max_results:
+            Used to limit the number of results presented in a page. Defaults
+            to ``None`` if no limit was specified.
+        :param unicode query:
+            Search term requested through the API. Defaults to ``None`` if no
+            search term was requested.
+
+        :return:
+            (cursor, data). ``cursor`` is an opaque string that refers to the
+            next page, and is ``None`` if this is the last page. ``data`` is a
+            list of all the objects within the page.
+        :rtype: tuple
         """
 
     def get(object_id):
@@ -30,7 +56,8 @@ class ICollection(Interface):
 
     def create(object_id, data):
         """
-        Create an object within the collection. May return a deferred.
+        Create an object within the collection and return the new ``object_id``
+        and object data. May return a deferred.
 
         If ``object_id`` is ``None``, an identifier will be generated. Some
         collections may insist on generating their own ``object_id`` and raise
@@ -42,7 +69,8 @@ class ICollection(Interface):
 
     def update(object_id, data):
         """
-        Update an object. May return a deferred.
+        Update an object and return the updated object data. May return a
+        deferred.
 
         ``object_id`` may not be ``None``.
 
@@ -52,7 +80,8 @@ class ICollection(Interface):
 
     def delete(object_id):
         """
-        Delete an object. May return a deferred.
+        Delete an object and return the deleted object data. May return a
+        deferred.
 
         ``object_id`` may not be ``None``.
 
