@@ -4,7 +4,10 @@
 import json
 import traceback
 
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+import treq
+import yaml
+
+from twisted.internet.defer import inlineCallbacks, maybeDeferred, returnValue
 from twisted.python import log
 
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
@@ -33,6 +36,13 @@ def create_urlspec_regex(dfn, *args, **kw):
     parts = dfn.split("/")
     parts = [replace_part(p) for p in parts]
     return "/".join(parts)
+
+
+class HealthHandler(RequestHandler):
+    suppress_request_log = True
+
+    def get(self, *args, **kw):
+        self.write("OK")
 
 
 class BaseHandler(RequestHandler):
@@ -150,14 +160,15 @@ class CollectionHandler(BaseHandler):
             returns an :class:`ICollection`. The collection_factory is
             called during ``RequestHandler.prepare``.
         """
-        return URLSpec(create_urlspec_regex(dfn), cls,
+        return URLSpec(create_urlspec_regex(dfn + "/"), cls,
                        kwargs={"collection_factory": collection_factory})
 
     def initialize(self, collection_factory):
         self.collection_factory = collection_factory
 
+    @inlineCallbacks
     def prepare(self):
-        self.collection = self.collection_factory(self)
+        self.collection = yield self.collection_factory(self)
 
     def get(self, *args, **kw):
         """
@@ -175,8 +186,8 @@ class CollectionHandler(BaseHandler):
         """
         data = json.loads(self.request.body)
         d = maybeDeferred(self.collection.create, None, data)
-        # TODO: better output once .create returns better things
-        d.addCallback(lambda object_id: self.write_object({"id": object_id}))
+        # the result of .create is (object_id, obj)
+        d.addCallback(lambda result: self.write_object(result[1]))
         d.addErrback(self.catch_err, 400, CollectionUsageError)
         d.addErrback(self.raise_err, 500, "Failed to create object.")
         return d
@@ -217,9 +228,10 @@ class ElementHandler(BaseHandler):
     def initialize(self, collection_factory):
         self.collection_factory = collection_factory
 
+    @inlineCallbacks
     def prepare(self):
-        self.elem_id = self.path_kwargs['elem_id']
-        self.collection = self.collection_factory(self)
+        self.elem_id = self.path_kwargs['elem_id'].encode('utf-8')
+        self.collection = yield self.collection_factory(self)
 
     def get(self, *args, **kw):
         """
@@ -271,30 +283,72 @@ def owner_from_header(header):
     an owner id instead of a :class:`RequestHandler`::
     """
     def owner_factory(handler):
-        return handler.request.headers[header]
+        owner = handler.request.headers.get(header)
+        if owner is None:
+            raise HTTPError(401)
+        return owner
     return owner_factory
 
 
 def owner_from_path_kwarg(path_kwarg):
     """
-    Return a function that retrieves a collection owner if from
+    Return a function that retrieves a collection owner id from
     the specified path argument.
 
     :param str path_kwarg:
         The name of the path argument. E.g. ``owner_id``.
     """
     def owner_factory(handler):
-        return handler.path_kwargs[path_kwarg]
+        owner = handler.path_kwargs.get(path_kwarg)
+        if owner is None:
+            raise HTTPError(401)
+        return owner
     return owner_factory
 
 
-def compose(f, g):
+def owner_from_oauth2_bouncer(url_base):
     """
-    Compose two functions, ``f`` and ``g``.
+    Return a function that retrieves a collection owner id from a call to an
+    auth service API.
+
+    :param str url_base:
+        The base URL to make an auth request to.
+
+    """
+    @inlineCallbacks
+    def owner_factory(handler):
+        request = handler.request
+        uri = "".join([url_base.rstrip('/'), request.uri])
+        auth_headers = {}
+        if 'Authorization' in request.headers:
+            auth_headers['Authorization'] = request.headers['Authorization']
+        resp = yield treq.get(uri, headers=auth_headers, persistent=False)
+        yield resp.content()
+        if resp.code >= 400:
+            raise HTTPError(resp.code)
+        [owner] = resp.headers.getRawHeaders('X-Owner-Id')
+        returnValue(owner)
+    return owner_factory
+
+
+def compose_deferred(f, g):
+    """
+    Compose two functions, ``f`` and ``g``, any of which may return a Deferred.
     """
     def h(*args, **kw):
-        return f(g(*args, **kw))
+        d = maybeDeferred(g, *args, **kw)
+        d.addCallback(f)
+        return d
     return h
+
+
+def read_yaml_config(config_file, optional=True):
+    """Parse an (usually) optional YAML config file."""
+    if optional and config_file is None:
+        return {}
+    with file(config_file, 'r') as stream:
+        # Assume we get a dict out of this.
+        return yaml.safe_load(stream)
 
 
 class ApiApplication(Application):
@@ -302,27 +356,65 @@ class ApiApplication(Application):
     An API for a set of collections and adhoc additional methods.
     """
 
+    config_required = False
+
     collections = ()
 
     collection_factory_preprocessor = staticmethod(
         owner_from_header('X-Owner-ID'))
 
-    def __init__(self, **settings):
-        routes = self._build_routes()
+    def __init__(self, config_file=None, **settings):
+        if self.config_required and config_file is None:
+            raise ValueError(
+                "Please specify a config file using --appopts=<config.yaml>")
+        config = self.get_config_settings(config_file)
+        self.setup_collection_factory_preprocessor(config)
+        self.initialize(settings, config)
+        path_prefix = self._get_configured_path_prefix(config)
+        routes = self._build_routes(path_prefix)
         Application.__init__(self, routes, **settings)
 
-    def _build_routes(self):
+    def initialize(self, settings, config):
+        """
+        Subclasses should override this to perform any application-level setup
+        they need.
+        """
+        pass
+
+    def setup_collection_factory_preprocessor(self, config):
+        # TODO: Better configuration mechanism than this.
+        auth_bouncer_url = config.get('auth_bouncer_url')
+        if auth_bouncer_url is not None:
+            self.collection_factory_preprocessor = (
+                owner_from_oauth2_bouncer(auth_bouncer_url))
+
+    def get_config_settings(self, config_file=None):
+        return read_yaml_config(config_file)
+
+    def _get_configured_path_prefix(self, config):
+        prefix = config.get('url_path_prefix')
+        return prefix or ""
+
+    def _build_routes(self, path_prefix=""):
         """
         Build up routes for handlers from collections and
         extra routes.
         """
-        routes = []
+        routes = [URLSpec('/health/', HealthHandler)]
         for dfn, collection_factory in self.collections:
+            dfn = "/".join([path_prefix.rstrip("/"), dfn.lstrip("/")])
             if self.collection_factory_preprocessor is not None:
-                collection_factory = compose(
+                collection_factory = compose_deferred(
                     collection_factory, self.collection_factory_preprocessor)
             routes.extend((
                 CollectionHandler.mk_urlspec(dfn, collection_factory),
                 ElementHandler.mk_urlspec(dfn, collection_factory),
             ))
         return routes
+
+    def log_request(self, handler):
+        if getattr(handler, 'suppress_request_log', False):
+            # The handler doesn't want to be logged, so we're done.
+            return
+
+        return Application.log_request(self, handler)

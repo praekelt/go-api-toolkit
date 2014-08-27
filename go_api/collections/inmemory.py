@@ -83,7 +83,7 @@ class InMemoryCollection(object):
         if self._get_data(object_id) is not None:
             raise CollectionObjectAlreadyExists(object_id)
         self._set_data(object_id, data)
-        return object_id
+        return (object_id, self._get_data(object_id))
 
     @simulate_async
     def update(self, object_id, data):
@@ -99,49 +99,3 @@ class InMemoryCollection(object):
             raise CollectionObjectNotFound(object_id)
         self._data.pop(self._id_to_key(object_id), None)
         return data
-
-
-@implementer(ICollection)
-class InMemoryStoreCollection(InMemoryCollection):
-    """
-    A collection of stores belonging to an owner.
-    Forgets things easily.
-    """
-
-    def __init__(self, data, owner_id, reactor=None):
-        self.owner_id = owner_id
-        super(InMemoryStoreCollection, self).__init__(data, reactor=reactor)
-
-
-@implementer(ICollection)
-class InMemoryRowCollection(InMemoryCollection):
-    """
-    A table of rows belonging to a store.
-    Forgets things easily.
-    """
-
-    def __init__(self, data, owner_id, store_id, reactor=None):
-        self.owner_id = owner_id
-        self.store_id = store_id
-        super(InMemoryRowCollection, self).__init__(data, reactor=reactor)
-
-    def _id_to_key(self, object_id):
-        """
-        Convert object_id into a key for the internal datastore.
-        """
-        return (self.store_id, object_id)
-
-    def _key_to_id(self, key):
-        """
-        Convert an internal datastore key into an object_id.
-        """
-        store_id, object_id = key
-        assert store_id == self.store_id
-        return object_id
-
-    def _is_my_key(self, key):
-        """
-        Exclude keys for rows belonging to different stores.
-        """
-        store_id, _object_id = key
-        return store_id == self.store_id
