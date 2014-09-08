@@ -222,7 +222,7 @@ class CollectionHandler(BaseHandler):
         """
         Create an element witin a collection.
         """
-        data = json.loads(self.request.body)
+        data = self.parse_json(self.request.body)
         d = maybeDeferred(self.collection.create, None, data)
         # the result of .create is (object_id, obj)
         d.addCallback(lambda result: self.write_object(result[1]))
@@ -287,7 +287,7 @@ class ElementHandler(BaseHandler):
         """
         Update an element within a collection.
         """
-        data = json.loads(self.request.body)
+        data = self.parse_json(self.request.body)
         d = maybeDeferred(self.collection.update, self.elem_id, data)
         d.addCallback(self.write_object)
         d.addErrback(self.catch_err, 404, CollectionObjectNotFound)
