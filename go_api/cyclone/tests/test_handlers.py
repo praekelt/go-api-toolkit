@@ -276,9 +276,7 @@ class TestCollectionHandler(BaseHandlerTestCase):
         """
         data = yield self.app_helper.post('/root/', data='{', parser='json')
         self.assertEqual(data.get(u'status_code'), 400)
-        self.assertEqual(
-            data.get(u'reason'),
-            u"Invalid JSON: Expecting object: line 1 column 1 (char 0)")
+        self.assertEqual(data.get(u'reason').find('Invalid JSON: '), 0)
 
 
 class TestElementHandler(BaseHandlerTestCase):
@@ -393,9 +391,7 @@ class TestElementHandler(BaseHandlerTestCase):
             data='{',
             parser='json')
         self.assertEqual(data.get(u'status_code'), 400)
-        self.assertEqual(
-            data.get(u'reason'),
-            u"Invalid JSON: Expecting object: line 1 column 1 (char 0)")
+        self.assertEqual(data.get(u'reason').find('Invalid JSON: '), 0)
 
     @inlineCallbacks
     def test_delete(self):
