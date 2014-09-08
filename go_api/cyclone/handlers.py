@@ -145,6 +145,12 @@ class BaseHandler(RequestHandler):
         }
         self.write(json.dumps(page))
 
+    def parse_json(self, data):
+        try:
+            return json.loads(data)
+        except ValueError as e:
+            raise HTTPError(400, reason="Invalid JSON: %s" % e)
+
 
 # TODO: Sort out response metadata and make responses follow a consistent
 #       pattern.
