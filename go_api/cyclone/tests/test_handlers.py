@@ -268,6 +268,18 @@ class TestCollectionHandler(BaseHandlerTestCase):
         [f] = self.flushLoggedErrors(DummyError)
         self.assertEqual(str(f.value), "You pushed the red button")
 
+    @inlineCallbacks
+    def test_post_bad_json(self):
+        """
+        This test makes sure that if invalid json is received, the ValueError
+        is correctly caught and returned as an HTTP 400 error.
+        """
+        data = yield self.app_helper.post('/root/', data='{', parser='json')
+        self.assertEqual(data.get(u'status_code'), 400)
+        self.assertEqual(
+            data.get(u'reason'),
+            u"Invalid JSON: Expecting object: line 1 column 1 (char 0)")
+
 
 class TestElementHandler(BaseHandlerTestCase):
     def setUp(self):
@@ -368,6 +380,22 @@ class TestElementHandler(BaseHandlerTestCase):
             resp, 500, "Failed to update 'obj2'")
         [f] = self.flushLoggedErrors(DummyError)
         self.assertEqual(str(f.value), "You pushed the red button")
+
+    @inlineCallbacks
+    def test_put_bad_json(self):
+        """
+        This test makes sure that if invalid json is received, the ValueError
+        is correctly caught and returned as an HTTP 400 error.
+        """
+        self.assertEqual(self.collection_data["obj2"], {"id": "obj2"})
+        data = yield self.app_helper.put(
+            '/root/obj2',
+            data='{',
+            parser='json')
+        self.assertEqual(data.get(u'status_code'), 400)
+        self.assertEqual(
+            data.get(u'reason'),
+            u"Invalid JSON: Expecting object: line 1 column 1 (char 0)")
 
     @inlineCallbacks
     def test_delete(self):
