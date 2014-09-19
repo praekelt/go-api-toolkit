@@ -464,7 +464,7 @@ class TestApiApplication(TestCase):
 
     def get_app_helper(self, collections=ApiApplication.collections,
                        preprocessor=(
-                           ApiApplication.collection_factory_preprocessor),
+                           ApiApplication.factory_preprocessor),
                        config=None, extra_settings=None):
         class MyApiApplication(ApiApplication):
             pass
@@ -472,7 +472,7 @@ class TestApiApplication(TestCase):
         MyApiApplication.collections = collections
         if callable(preprocessor):
             preprocessor = staticmethod(preprocessor)
-        MyApiApplication.collection_factory_preprocessor = preprocessor
+        MyApiApplication.factory_preprocessor = preprocessor
         if extra_settings is None:
             extra_settings = {}
         return AppHelper(MyApiApplication(config, **extra_settings))
@@ -677,14 +677,14 @@ class TestApiApplication(TestCase):
         # that we don't have the default preprocessor.
         app = ApiApplication(tempfile)
         self.assertNotEqual(
-            app.collection_factory_preprocessor,
-            ApiApplication.collection_factory_preprocessor)
+            app.factory_preprocessor,
+            ApiApplication.factory_preprocessor)
 
         # With no config specified, we should have the default preprocessor.
         app = ApiApplication()
         self.assertEqual(
-            app.collection_factory_preprocessor,
-            ApiApplication.collection_factory_preprocessor)
+            app.factory_preprocessor,
+            ApiApplication.factory_preprocessor)
 
     def test_configure_url_path_prefix(self):
         config_dict = {'url_path_prefix': '/foo/bar'}

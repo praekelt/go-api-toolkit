@@ -311,14 +311,14 @@ class ElementHandler(BaseHandler):
 
 def owner_from_header(header):
     """
-    Return a function that retrieves a collection owner id from
-    the specified HTTP header.
+    Return a function that retrieves an owner id from the specified HTTP
+    header.
 
     :param str header:
        The name of the HTTP header. E.g. ``X-Owner-ID``.
 
-    Typically used to build a collection factory that accepts
-    an owner id instead of a :class:`RequestHandler`::
+    Typically used to build a factory that accepts an owner id instead of a
+    :class:`RequestHandler`::
     """
     def owner_factory(handler):
         owner = handler.request.headers.get(header)
@@ -330,8 +330,8 @@ def owner_from_header(header):
 
 def owner_from_path_kwarg(path_kwarg):
     """
-    Return a function that retrieves a collection owner id from
-    the specified path argument.
+    Return a function that retrieves an owner id from the specified path
+    argument.
 
     :param str path_kwarg:
         The name of the path argument. E.g. ``owner_id``.
@@ -346,8 +346,8 @@ def owner_from_path_kwarg(path_kwarg):
 
 def owner_from_oauth2_bouncer(url_base):
     """
-    Return a function that retrieves a collection owner id from a call to an
-    auth service API.
+    Return a function that retrieves an owner id from a call to an auth service
+    API.
 
     :param str url_base:
         The base URL to make an auth request to.
@@ -398,15 +398,14 @@ class ApiApplication(Application):
 
     collections = ()
 
-    collection_factory_preprocessor = staticmethod(
-        owner_from_header('X-Owner-ID'))
+    factory_preprocessor = staticmethod(owner_from_header('X-Owner-ID'))
 
     def __init__(self, config_file=None, **settings):
         if self.config_required and config_file is None:
             raise ValueError(
                 "Please specify a config file using --appopts=<config.yaml>")
         config = self.get_config_settings(config_file)
-        self.setup_collection_factory_preprocessor(config)
+        self.setup_factory_preprocessor(config)
         self.initialize(settings, config)
         path_prefix = self._get_configured_path_prefix(config)
         routes = self._build_routes(path_prefix)
@@ -419,11 +418,11 @@ class ApiApplication(Application):
         """
         pass
 
-    def setup_collection_factory_preprocessor(self, config):
+    def setup_factory_preprocessor(self, config):
         # TODO: Better configuration mechanism than this.
         auth_bouncer_url = config.get('auth_bouncer_url')
         if auth_bouncer_url is not None:
-            self.collection_factory_preprocessor = (
+            self.factory_preprocessor = (
                 owner_from_oauth2_bouncer(auth_bouncer_url))
 
     def get_config_settings(self, config_file=None):
@@ -441,9 +440,9 @@ class ApiApplication(Application):
         routes = [URLSpec('/health/', HealthHandler)]
         for dfn, collection_factory in self.collections:
             dfn = "/".join([path_prefix.rstrip("/"), dfn.lstrip("/")])
-            if self.collection_factory_preprocessor is not None:
+            if self.factory_preprocessor is not None:
                 collection_factory = compose_deferred(
-                    collection_factory, self.collection_factory_preprocessor)
+                    collection_factory, self.factory_preprocessor)
             routes.extend((
                 CollectionHandler.mk_urlspec(dfn, collection_factory),
                 ElementHandler.mk_urlspec(dfn, collection_factory),
