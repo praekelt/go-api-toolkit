@@ -15,6 +15,24 @@ from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
+def join_paths(*paths):
+    paths = [p for p in paths if p]
+
+    if len(paths) < 2:
+        return "".join(paths)
+
+    parts = [p.lstrip("/").rstrip("/") for p in paths]
+    result = "/".join(p for p in parts if p)
+
+    if paths[0].startswith("/"):
+        result = "/" + result
+
+    if paths[-1].endswith("/"):
+        result = result + "/"
+
+    return result
+
+
 def parse_route_vars(dfn):
     return [p.lstrip(":") for p in dfn.split("/") if p.startswith(":")]
 
@@ -76,11 +94,7 @@ class BaseHandler(RequestHandler):
             returns an :class:`ICollection`. The model_factory is
             called during ``RequestHandler.prepare``.
         """
-        dfn = "/".join([
-            path_prefix.rstrip("/"),
-            dfn.lstrip("/").rstrip("/"),
-            cls.route_suffix.lstrip("/")])
-
+        dfn = join_paths(path_prefix, dfn, cls.route_suffix)
         return URLSpec(create_urlspec_regex(dfn), cls,
                        kwargs={"model_factory": model_factory})
 
@@ -211,6 +225,7 @@ class CollectionHandler(BaseHandler):
     * ``POST /`` - add an item to the collection.
     """
 
+    route_suffix = "/"
     model_alias = "collection"
 
     def get(self, *args, **kw):
@@ -301,7 +316,6 @@ class ElementHandler(BaseHandler):
         d.addErrback(self.raise_err, 500,
                      "Failed to delete %r" % (self.elem_id,))
         return d
-
 
 
 def owner_from_header(header):

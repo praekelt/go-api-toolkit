@@ -13,7 +13,7 @@ from go_api.collections import InMemoryCollection
 from go_api.collections.errors import CollectionUsageError
 from go_api.cyclone.handlers import (
     BaseHandler, CollectionHandler, ElementHandler,
-    parse_route_vars, create_urlspec_regex, ApiApplication,
+    join_paths, parse_route_vars, create_urlspec_regex, ApiApplication,
     owner_from_header, owner_from_path_kwarg, owner_from_oauth2_bouncer)
 from go_api.cyclone.helpers import HandlerHelper, AppHelper, MockHttpServer
 
@@ -38,6 +38,31 @@ def raise_dummy_error(*args, **kw):
     paths.
     """
     raise DummyError("You pushed the red button")
+
+
+class TestJoinPaths(TestCase):
+    def test_none(self):
+        self.assertEqual(join_paths(""), "")
+
+    def test_leading_slash(self):
+        self.assertEqual(join_paths("/foo", "bar", "baz"), "/foo/bar/baz")
+
+    def test_trailing_slash(self):
+        self.assertEqual(join_paths("foo", "bar", "baz/"), "foo/bar/baz/")
+
+    def test_leading_and_trailing_slash(self):
+        self.assertEqual(join_paths("/foo", "bar", "baz/"), "/foo/bar/baz/")
+
+    def test_no_slash(self):
+        self.assertEqual(join_paths("foo"), "foo")
+
+    def test_standalone_slash(self):
+        self.assertEqual(join_paths("/"), "/")
+
+    def test_empty_paths(self):
+        self.assertEqual(
+            join_paths("", "foo", "", "bar", "", "baz", ""),
+            "foo/bar/baz")
 
 
 class TestParseRouteVars(TestCase):
