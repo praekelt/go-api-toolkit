@@ -405,6 +405,7 @@ class ApiApplication(Application):
 
     config_required = False
 
+    models = ()
     collections = ()
 
     factory_preprocessor = staticmethod(owner_from_header('X-Owner-ID'))
@@ -463,6 +464,14 @@ class ApiApplication(Application):
             self._build_route(path_prefix, dfn, CollectionHandler, factory)
             for dfn, factory in self.collections]
 
+    def _build_model_routes(self, path_prefix):
+        """
+        Build up routes for handlers.
+        """
+        return [
+            self._build_route(path_prefix, dfn, handler, factory)
+            for dfn, handler, factory in self.models]
+
     def _build_routes(self, path_prefix=""):
         """
         Build up routes for handlers from collections and
@@ -471,6 +480,8 @@ class ApiApplication(Application):
         routes = [URLSpec('/health/', HealthHandler)]
         routes.extend(self._build_collection_routes(path_prefix))
         routes.extend(self._build_element_routes(path_prefix))
+        routes.extend(self._build_model_routes(path_prefix))
+        print routes
         return routes
 
     def log_request(self, handler):

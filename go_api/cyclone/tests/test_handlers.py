@@ -24,6 +24,11 @@ class DummyError(Exception):
     """
 
 
+class DummyHandler(BaseHandler):
+    def get(self, *args, **kw):
+        self.write_object(self.model)
+
+
 def raise_usage_error(*args, **kw):
     """
     Function that raises a generic :class:`CollectionUsageError`. For use in
@@ -199,13 +204,13 @@ class TestBaseHandler(TestCase):
 
     def test_initialize(self):
         model = {}
-        helper = HandlerHelper(BaseHandler, {"model_factory": lambda x: model})
+        helper = HandlerHelper(BaseHandler, {"model_factory": lambda _: model})
         handler = helper.mk_handler()
         self.assertEqual(handler.model_factory(handler), model)
 
     def test_prepare_model(self):
         model = {}
-        helper = HandlerHelper(BaseHandler, {"model_factory": lambda x: model})
+        helper = HandlerHelper(BaseHandler, {"model_factory": lambda _: model})
         handler = helper.mk_handler()
         handler.prepare()
         self.assertEqual(handler.model, model)
@@ -216,7 +221,7 @@ class TestBaseHandler(TestCase):
 
         model = {}
         helper = HandlerHelper(
-            DummyHandler, {"model_factory": lambda x: model})
+            DummyHandler, {"model_factory": lambda _: model})
 
         handler = helper.mk_handler()
         handler.prepare()
@@ -226,7 +231,7 @@ class TestBaseHandler(TestCase):
         class DummyHandler(BaseHandler):
             model_alias = None
 
-        helper = HandlerHelper(DummyHandler, {"model_factory": lambda x: None})
+        helper = HandlerHelper(DummyHandler, {"model_factory": lambda _: None})
         handler = helper.mk_handler()
 
         # errors if BaseHandler doesn't know how to handle no model alias
@@ -236,7 +241,7 @@ class TestBaseHandler(TestCase):
         class DummyHandler(BaseHandler):
             route_suffix = '/:foo/:baz'
 
-        helper = HandlerHelper(DummyHandler, {"model_factory": lambda x: None})
+        helper = HandlerHelper(DummyHandler, {"model_factory": lambda _: None})
         handler = helper.mk_handler()
         handler.path_kwargs = {
             "foo": "bar",
@@ -507,6 +512,11 @@ class TestApiApplication(TestCase):
             handler_kwargs={
                 "model_factory": self.uncallable_model_factory,
             })
+        self.dummy_helper = HandlerHelper(
+            DummyHandler,
+            handler_kwargs={
+                "model_factory": self.uncallable_model_factory,
+            })
 
     @inlineCallbacks
     def tearDown(self):
@@ -530,23 +540,29 @@ class TestApiApplication(TestCase):
         collection = InMemoryCollection(data)
         return lambda _req: collection
 
-    def get_app_helper(self, collections=ApiApplication.collections,
-                       preprocessor=(
-                           ApiApplication.factory_preprocessor),
-                       config=None, extra_settings=None):
+    def get_app_helper(self,
+                       collections=ApiApplication.collections,
+                       models=ApiApplication.models,
+                       preprocessor=ApiApplication.factory_preprocessor,
+                       config=None,
+                       extra_settings=None):
         class MyApiApplication(ApiApplication):
             pass
 
         MyApiApplication.collections = collections
+        MyApiApplication.models = models
+
         if callable(preprocessor):
             preprocessor = staticmethod(preprocessor)
+
         MyApiApplication.factory_preprocessor = preprocessor
         if extra_settings is None:
             extra_settings = {}
+
         return AppHelper(MyApiApplication(config, **extra_settings))
 
     @inlineCallbacks
-    def test_process_request_health_check(self):
+    def test_process_health_request_check(self):
         app_helper = self.get_app_helper()
         result = yield app_helper.request('GET', '/health/')
         content = yield result.content()
@@ -554,7 +570,7 @@ class TestApiApplication(TestCase):
         self.assertEqual(content, "OK")
 
     @inlineCallbacks
-    def test_process_request_default_preprocessor(self):
+    def test_process_collection_request_default_preprocessor(self):
         collection_data = {'foo': {'id': 'foo'}}
         model_factory = self.get_collection_factory(collection_data)
         app_helper = self.get_app_helper(
@@ -566,7 +582,7 @@ class TestApiApplication(TestCase):
         self.assertEqual(json.loads(content), collection_data['foo'])
 
     @inlineCallbacks
-    def test_process_request_no_preprocessor(self):
+    def test_process_collection_request_no_preprocessor(self):
         collection_data = {'foo': {'id': 'foo'}}
         model_factory = self.get_collection_factory(collection_data)
         app_helper = self.get_app_helper(
@@ -577,7 +593,7 @@ class TestApiApplication(TestCase):
         self.assertEqual(json.loads(content), collection_data['foo'])
 
     @inlineCallbacks
-    def test_process_request_async_preprocessor(self):
+    def test_process_collection_request_async_preprocessor(self):
         collection_data = {'foo': {'id': 'foo'}}
         model_factory = self.get_collection_factory(collection_data)
         app_helper = self.get_app_helper(
@@ -588,7 +604,7 @@ class TestApiApplication(TestCase):
         self.assertEqual(json.loads(content), collection_data['foo'])
 
     @inlineCallbacks
-    def test_process_request_bouncer_preprocessor(self):
+    def test_process_collection_request_bouncer_preprocessor(self):
         collection_data = {'foo': {'id': 'foo'}}
         model_factory = self.get_collection_factory(collection_data)
         auth_server = yield self.start_fake_auth_server("owner-1")
@@ -598,6 +614,53 @@ class TestApiApplication(TestCase):
         result = yield app_helper.request('GET', '/foo/store/?stream=true')
         content = yield result.content()
         self.assertEqual(json.loads(content), collection_data['foo'])
+
+    @inlineCallbacks
+    def test_process_model_request_default_preprocessor(self):
+        model = {'foo': 'bar'}
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, lambda _: model),))
+
+        result = yield app_helper.request(
+            'GET', '/foo',
+            headers={"X-Owner-ID": "owner-1"})
+        content = yield result.content()
+        self.assertEqual(json.loads(content), model)
+
+    @inlineCallbacks
+    def test_process_model_request_no_preprocessor(self):
+        model = {'foo': 'bar'}
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, lambda _: model),),
+            preprocessor=None)
+
+        result = yield app_helper.request('GET', '/foo')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), model)
+
+    @inlineCallbacks
+    def test_process_model_request_async_preprocessor(self):
+        model = {'foo': 'bar'}
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, lambda _: model),),
+            preprocessor=lambda handler: succeed("owner-1"))
+
+        result = yield app_helper.request('GET', '/foo')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), model)
+
+    @inlineCallbacks
+    def test_process_model_request_bouncer_preprocessor(self):
+        model = {'foo': 'bar'}
+        auth_server = yield self.start_fake_auth_server("owner-1")
+
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, lambda _: model),),
+            preprocessor=owner_from_oauth2_bouncer(auth_server.url))
+
+        result = yield app_helper.request('GET', '/foo')
+        content = yield result.content()
+        self.assertEqual(json.loads(content), model)
 
     def uncallable_model_factory(self, *args, **kw):
         """
@@ -610,9 +673,10 @@ class TestApiApplication(TestCase):
         model_factory = self.uncallable_model_factory
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', model_factory),),
+            models=(('/foo', DummyHandler, model_factory),),
             preprocessor=None)
         routes = app_helper.app.handlers[0][1]
-        [_health_route, collection_route, elem_route] = routes
+        [_health_route, collection_route, elem_route, model_route] = routes
         self.assertEqual(collection_route.handler_class, CollectionHandler)
         self.assertEqual(collection_route.regex.pattern,
                          "/(?P<owner_id>[^/]*)/store/$")
@@ -625,10 +689,16 @@ class TestApiApplication(TestCase):
         self.assertEqual(elem_route.kwargs, {
             "model_factory": model_factory,
         })
+        self.assertEqual(model_route.handler_class, DummyHandler)
+        self.assertEqual(model_route.regex.pattern, "/foo$")
+        self.assertEqual(model_route.kwargs, {
+            "model_factory": model_factory,
+        })
 
     @inlineCallbacks
-    def assert_handlers_get_owner(self, app, collection_name, **handler_kw):
-        [_health_route, collection_route, elem_route] = app.handlers[0][1]
+    def assert_collection_handlers_get_owner(self, app, collection_name,
+                                              **handler_kw):
+        [_health_route, collection_route, elem_route] = app.handlers[0][1][:3]
 
         handler = self.collection_helper.mk_handler(**handler_kw)
         model_factory = collection_route.kwargs["model_factory"]
@@ -641,57 +711,118 @@ class TestApiApplication(TestCase):
         self.assertEqual(owner, collection_name)
 
     @inlineCallbacks
-    def test_build_routes_with_default_preprocessor(self):
+    def assert_model_handlers_get_owner(self, app, model_name, **handler_kw):
+        for model_route in app.handlers[0][1][3:]:
+            handler = self.model_helper.mk_handler(**handler_kw)
+            model_factory = model_route.kwargs["model_factory"]
+            owner = yield model_factory(handler)
+            self.assertEqual(owner, model_name)
+
+    @inlineCallbacks
+    def test_build_collection_routes_with_default_preprocessor(self):
         model_factory = lambda owner_id: "collection-%s" % owner_id
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', model_factory),))
 
-        yield self.assert_handlers_get_owner(
+        yield self.assert_collection_handlers_get_owner(
             app_helper.app, "collection-owner-1",
             headers={"X-Owner-ID": "owner-1"})
 
     @inlineCallbacks
-    def test_build_routes_with_header_preprocessor(self):
+    def test_build_collection_routes_with_header_preprocessor(self):
         model_factory = lambda owner_id: "collection-%s" % owner_id
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', model_factory),),
             preprocessor=owner_from_header("X-Foo-ID"))
 
-        yield self.assert_handlers_get_owner(
+        yield self.assert_collection_handlers_get_owner(
             app_helper.app, "collection-owner-1",
             headers={"X-Foo-ID": "owner-1"})
 
     @inlineCallbacks
-    def test_build_routes_with_path_kwargs_preprocessor(self):
+    def test_build_collection_routes_with_path_kwargs_preprocessor(self):
         model_factory = lambda owner_id: "collection-%s" % owner_id
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', model_factory),),
             preprocessor=owner_from_path_kwarg("owner_id"))
 
-        yield self.assert_handlers_get_owner(
+        yield self.assert_collection_handlers_get_owner(
             app_helper.app, "collection-owner-1",
             path_kwargs={"owner_id": "owner-1"})
 
     @inlineCallbacks
-    def test_build_routes_with_async_preprocessor(self):
+    def test_build_collection_routes_with_async_preprocessor(self):
         model_factory = lambda owner_id: "collection-%s" % owner_id
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', model_factory),),
             preprocessor=lambda handler: succeed("owner-1"))
 
-        yield self.assert_handlers_get_owner(
+        yield self.assert_collection_handlers_get_owner(
             app_helper.app, "collection-owner-1")
 
     @inlineCallbacks
-    def test_build_routes_with_bouncer_preprocessor(self):
+    def test_build_collection_routes_with_bouncer_preprocessor(self):
         auth_server = yield self.start_fake_auth_server("owner-1")
         model_factory = lambda owner_id: "collection-%s" % owner_id
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', model_factory),),
             preprocessor=owner_from_oauth2_bouncer(auth_server.url))
 
-        yield self.assert_handlers_get_owner(
+        yield self.assert_collection_handlers_get_owner(
             app_helper.app, "collection-owner-1",
+            headers={"Authorization": "Bearer token"})
+
+    @inlineCallbacks
+    def test_build_model_routes_with_default_preprocessor(self):
+        model_factory = lambda owner_id: "model-%s" % owner_id
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, model_factory),))
+
+        yield self.assert_model_handlers_get_owner(
+            app_helper.app, "model-owner-1",
+            headers={"X-Owner-ID": "owner-1"})
+
+    @inlineCallbacks
+    def test_build_model_routes_with_header_preprocessor(self):
+        model_factory = lambda owner_id: "model-%s" % owner_id
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, model_factory),),
+            preprocessor=owner_from_header("X-Foo-ID"))
+
+        yield self.assert_model_handlers_get_owner(
+            app_helper.app, "model-owner-1",
+            headers={"X-Foo-ID": "owner-1"})
+
+    @inlineCallbacks
+    def test_build_model_routes_with_path_kwargs_preprocessor(self):
+        model_factory = lambda owner_id: "model-%s" % owner_id
+        app_helper = self.get_app_helper(
+            models=(('/:owner_id/foo', DummyHandler, model_factory),),
+            preprocessor=owner_from_path_kwarg("owner_id"))
+
+        yield self.assert_model_handlers_get_owner(
+            app_helper.app, "model-owner-1")
+
+    @inlineCallbacks
+    def test_build_model_routes_with_async_preprocessor(self):
+        model_factory = lambda owner_id: "model-%s" % owner_id
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, model_factory),),
+            preprocessor=lambda handler: succeed("owner-1"))
+
+        yield self.assert_model_handlers_get_owner(
+            app_helper.app, "model-owner-1")
+
+    @inlineCallbacks
+    def test_build_model_routes_with_bouncer_preprocessor(self):
+        auth_server = yield self.start_fake_auth_server("owner-1")
+        model_factory = lambda owner_id: "model-%s" % owner_id
+        app_helper = self.get_app_helper(
+            models=(('/foo', DummyHandler, model_factory),),
+            preprocessor=owner_from_oauth2_bouncer(auth_server.url))
+
+        yield self.assert_model_handlers_get_owner(
+            app_helper.app, "model-owner-1",
             headers={"Authorization": "Bearer token"})
 
     def test_get_config_settings_None(self):
@@ -765,9 +896,10 @@ class TestApiApplication(TestCase):
         model_factory = self.get_collection_factory({})
         app_helper = self.get_app_helper(
             collections=(('/:owner_id/store', model_factory),),
+            models=(('/baz', DummyHandler, self.uncallable_model_factory),),
             config=tempfile)
 
-        [health, collection, element] = app_helper.app.handlers[0][1]
+        [health, collection, element, model] = app_helper.app.handlers[0][1]
         # No prefix for the health URL path.
         self.assertEqual(health.regex.pattern, r'/health/$')
         # We should have the prefix on the front of our other URL paths.
@@ -777,13 +909,17 @@ class TestApiApplication(TestCase):
         self.assertEqual(
             element.regex.pattern,
             r'/foo/bar/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
+        self.assertEqual(
+            model.regex.pattern,
+            r'/foo/bar/baz$')
 
     def test_no_url_path_prefix(self):
         model_factory = self.get_collection_factory({})
         app_helper = self.get_app_helper(
-            collections=(('/:owner_id/store', model_factory),))
+            collections=(('/:owner_id/store', model_factory),),
+            models=(('/baz', DummyHandler, self.uncallable_model_factory),))
 
-        [health, collection, element] = app_helper.app.handlers[0][1]
+        [health, collection, element, model] = app_helper.app.handlers[0][1]
 
         self.assertEqual(health.regex.pattern, r'/health/$')
         self.assertEqual(
@@ -792,6 +928,9 @@ class TestApiApplication(TestCase):
         self.assertEqual(
             element.regex.pattern,
             r'/(?P<owner_id>[^/]*)/store/(?P<elem_id>[^/]*)$')
+        self.assertEqual(
+            model.regex.pattern,
+            r'/baz$')
 
     @inlineCallbacks
     def test_handler_log_suppression(self):
