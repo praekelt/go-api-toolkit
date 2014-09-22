@@ -15,7 +15,11 @@ from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
-def create_urlspec_regex(dfn, *args, **kw):
+def parse_route_vars(dfn):
+    return [p.lstrip(":") for p in dfn.split("/") if p.startswith(":")]
+
+
+def create_urlspec_regex(dfn):
     """
     Create a URLSpec regex from a friendlier definition.
 
@@ -50,6 +54,48 @@ class BaseHandler(RequestHandler):
     Base class for utility methods for :class:`CollectionHandler`
     and :class:`ElementHandler`.
     """
+
+    model_alias = None
+    route_suffix = ""
+
+    @classmethod
+    def mk_urlspec(cls, dfn, model_factory, path_prefix=""):
+        """
+        Constructs a :class:`URLSpec` from a path definition and
+        a collection factory. The returned :class:`URLSpec` routes
+        the constructed path to a :class:`CollectionHandler` with the
+        given ``model_factory``.
+
+        :param str dfn:
+            A path definition suitbale for passing to
+            :func:`create_urlspec_regex`. Any path arguments will
+            appear in ``handler.path_kwargs`` on the ``handler`` passed
+            to the ``model_factory``.
+        :param func model_factory:
+            A function that takes a :class:`RequestHandler` instance and
+            returns an :class:`ICollection`. The model_factory is
+            called during ``RequestHandler.prepare``.
+        """
+        dfn = "/".join([
+            path_prefix.rstrip("/"),
+            dfn.lstrip("/").rstrip("/"),
+            cls.route_suffix.lstrip("/")])
+
+        return URLSpec(create_urlspec_regex(dfn), cls,
+                       kwargs={"model_factory": model_factory})
+
+    def initialize(self, model_factory):
+        self.model_factory = model_factory
+
+    @inlineCallbacks
+    def prepare(self):
+        for path_var in parse_route_vars(self.route_suffix):
+            setattr(self, path_var, self.path_kwargs[path_var].encode('utf-8'))
+
+        self.model = yield self.model_factory(self)
+
+        if self.model_alias is not None:
+            setattr(self, self.model_alias, self.model)
 
     def raise_err(self, failure, status_code, reason):
         """
@@ -165,33 +211,7 @@ class CollectionHandler(BaseHandler):
     * ``POST /`` - add an item to the collection.
     """
 
-    @classmethod
-    def mk_urlspec(cls, dfn, collection_factory):
-        """
-        Constructs a :class:`URLSpec` from a path definition and
-        a collection factory. The returned :class:`URLSpec` routes
-        the constructed path to a :class:`CollectionHandler` with the
-        given ``collection_factory``.
-
-        :param str dfn:
-            A path definition suitbale for passing to
-            :func:`create_urlspec_regex`. Any path arguments will
-            appear in ``handler.path_kwargs`` on the ``handler`` passed
-            to the ``collection_factory``.
-        :param func collection_factory:
-            A function that takes a :class:`RequestHandler` instance and
-            returns an :class:`ICollection`. The collection_factory is
-            called during ``RequestHandler.prepare``.
-        """
-        return URLSpec(create_urlspec_regex(dfn + "/"), cls,
-                       kwargs={"collection_factory": collection_factory})
-
-    def initialize(self, collection_factory):
-        self.collection_factory = collection_factory
-
-    @inlineCallbacks
-    def prepare(self):
-        self.collection = yield self.collection_factory(self)
+    model_alias = "collection"
 
     def get(self, *args, **kw):
         """
@@ -242,34 +262,8 @@ class ElementHandler(BaseHandler):
     * ``DELETE /:elem_id`` - delete an element.
     """
 
-    @classmethod
-    def mk_urlspec(cls, dfn, collection_factory):
-        """
-        Constructs a :class:`URLSpec` from a path definition and
-        a collection factory. The returned :class:`URLSpec` routes
-        the constructed path, with an ``elem_id`` path suffix appended,
-        to an :class:`ElementHandler` with the given ``collection_factory``.
-
-        :param str dfn:
-            A path definition suitbale for passing to
-            :func:`create_urlspec_regex`. Any path arguments will
-            appear in ``handler.path_kwargs`` on the ``handler`` passed
-            to the ``collection_factory``.
-        :param func collection_factory:
-            A function that takes a :class:`RequestHandler` instance and
-            returns an :class:`ICollection`. The collection_factory is
-            called during ``RequestHandler.prepare``.
-        """
-        return URLSpec(create_urlspec_regex(dfn + '/:elem_id'), cls,
-                       kwargs={"collection_factory": collection_factory})
-
-    def initialize(self, collection_factory):
-        self.collection_factory = collection_factory
-
-    @inlineCallbacks
-    def prepare(self):
-        self.elem_id = self.path_kwargs['elem_id'].encode('utf-8')
-        self.collection = yield self.collection_factory(self)
+    route_suffix = ":elem_id"
+    model_alias = "collection"
 
     def get(self, *args, **kw):
         """
@@ -307,6 +301,7 @@ class ElementHandler(BaseHandler):
         d.addErrback(self.raise_err, 500,
                      "Failed to delete %r" % (self.elem_id,))
         return d
+
 
 
 def owner_from_header(header):
@@ -432,21 +427,36 @@ class ApiApplication(Application):
         prefix = config.get('url_path_prefix')
         return prefix or ""
 
+    def _build_route(self, path_prefix, dfn, handler, factory):
+        if self.factory_preprocessor is not None:
+            factory = compose_deferred(factory, self.factory_preprocessor)
+
+        return handler.mk_urlspec(dfn, factory, path_prefix=path_prefix)
+
+    def _build_element_routes(self, path_prefix):
+        """
+        Build up routes for handlers.
+        """
+        return [
+            self._build_route(path_prefix, dfn, ElementHandler, factory)
+            for dfn, factory in self.collections]
+
+    def _build_collection_routes(self, path_prefix):
+        """
+        Build up routes for handlers.
+        """
+        return [
+            self._build_route(path_prefix, dfn, CollectionHandler, factory)
+            for dfn, factory in self.collections]
+
     def _build_routes(self, path_prefix=""):
         """
         Build up routes for handlers from collections and
         extra routes.
         """
         routes = [URLSpec('/health/', HealthHandler)]
-        for dfn, collection_factory in self.collections:
-            dfn = "/".join([path_prefix.rstrip("/"), dfn.lstrip("/")])
-            if self.factory_preprocessor is not None:
-                collection_factory = compose_deferred(
-                    collection_factory, self.factory_preprocessor)
-            routes.extend((
-                CollectionHandler.mk_urlspec(dfn, collection_factory),
-                ElementHandler.mk_urlspec(dfn, collection_factory),
-            ))
+        routes.extend(self._build_collection_routes(path_prefix))
+        routes.extend(self._build_element_routes(path_prefix))
         return routes
 
     def log_request(self, handler):
