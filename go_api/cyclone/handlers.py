@@ -121,6 +121,8 @@ class BaseHandler(RequestHandler):
             A function that takes a :class:`RequestHandler` instance and
             returns a model instance. The model_factory is
             called during ``RequestHandler.prepare``.
+        :param str path_prefix:
+            A prefix to add to the path ``dfn``. Defaults to ``""``.
         """
         dfn = join_paths(path_prefix, dfn, cls.route_suffix)
 
