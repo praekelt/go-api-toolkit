@@ -135,7 +135,7 @@ class BaseHandler(RequestHandler):
     @inlineCallbacks
     def prepare(self):
         for path_var in parse_route_vars(self.route_suffix):
-            setattr(self, path_var, self.path_kwargs[path_var])
+            setattr(self, path_var, self.path_kwargs[path_var].encode('utf-8'))
 
         self.model = yield self.model_factory(self)
 
@@ -310,11 +310,6 @@ class ElementHandler(BaseHandler):
 
     route_suffix = ":elem_id"
     model_alias = "collection"
-
-    @inlineCallbacks
-    def prepare(self):
-        yield super(ElementHandler, self).prepare()
-        self.elem_id = self.elem_id.encode('utf-8')
 
     def get(self, *args, **kw):
         """
