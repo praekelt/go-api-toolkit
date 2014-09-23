@@ -91,11 +91,6 @@ class TestParseRouteVars(TestCase):
             parse_route_vars("/:foo/bar/:baz"),
             ["foo", "baz"])
 
-    def test_duplicate_variables(self):
-        self.assertEqual(
-            parse_route_vars("/:foo/bar/:baz"),
-            ["foo", "baz"])
-
 
 class TestCreateUrlspecRegex(TestCase):
     def test_no_variables(self):
