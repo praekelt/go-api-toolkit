@@ -51,9 +51,6 @@ def join_paths(*paths):
 
 
 def duplicates(values):
-    if len(values) == len(set(values)):
-        return set([])
-
     return set([v for v in values if values.count(v) > 1])
 
 
@@ -74,6 +71,7 @@ def create_urlspec_regex(dfn):
       /foo/(?P<var>[^/]*)/baz/(?P<other_var>[^/]*)
     """
     duplicate_vars = duplicates(parse_route_vars(dfn))
+
     if duplicate_vars:
         raise RouteParseError(
             "Duplicate route variables found: %s" %
