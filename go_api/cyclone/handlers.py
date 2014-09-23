@@ -15,7 +15,50 @@ from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
-def create_urlspec_regex(dfn, *args, **kw):
+class RouteParseError(Exception):
+    "Raised when an erroneous route is parsed"
+
+
+def join_paths(*paths):
+    """
+    Joins together the given paths with a '/'.
+
+    .. code-block::
+
+        join_paths("/foo/", "/bar/", "baz", "/quux/")
+        # => /foo/bar/baz/quux/
+    """
+    # filter out empty strings
+    paths = [p for p in paths if p]
+
+    # simply return a single path or no paths (e.g. '/')
+    if len(paths) < 2:
+        return "".join(paths)
+
+    # strip out leading and trailing slashes
+    stripped = [p.strip("/") for p in paths]
+    result = "/".join(p for p in stripped if p)
+
+    # bring back the first leading slash if relevant
+    if paths[0].startswith("/"):
+        result = "/" + result
+
+    # bring back the last trailing slash if relevant
+    if paths[-1].endswith("/"):
+        result = result + "/"
+
+    return result
+
+
+def duplicates(values):
+    return set([v for v in values if values.count(v) > 1])
+
+
+def parse_route_vars(dfn):
+   return [p.lstrip(":") for p in dfn.split("/") if p.startswith(":")]
+
+
+def create_urlspec_regex(dfn):
     """
     Create a URLSpec regex from a friendlier definition.
 
@@ -27,6 +70,13 @@ def create_urlspec_regex(dfn, *args, **kw):
 
       /foo/(?P<var>[^/]*)/baz/(?P<other_var>[^/]*)
     """
+    duplicate_vars = duplicates(parse_route_vars(dfn))
+
+    if duplicate_vars:
+        raise RouteParseError(
+            "Duplicate route variables found: %s" %
+            (",".join(duplicate_vars),))
+
     def replace_part(part):
         if not part.startswith(':'):
             return part
@@ -50,6 +100,47 @@ class BaseHandler(RequestHandler):
     Base class for utility methods for :class:`CollectionHandler`
     and :class:`ElementHandler`.
     """
+
+    model_alias = None
+    route_suffix = ""
+
+    @classmethod
+    def mk_urlspec(cls, dfn, model_factory, path_prefix=""):
+        """
+        Constructs a :class:`URLSpec` from a path definition and
+        a model factory. The returned :class:`URLSpec` routes
+        the constructed path to a :class:`BaseHandler` with the
+        given ``model_factory``.
+
+        :param str dfn:
+            A path definition suitbale for passing to
+            :func:`create_urlspec_regex`. Any path arguments will
+            appear in ``handler.path_kwargs`` on the ``handler`` passed
+            to the ``model_factory``.
+        :param func model_factory:
+            A function that takes a :class:`RequestHandler` instance and
+            returns a model instance. The model_factory is
+            called during ``RequestHandler.prepare``.
+        :param str path_prefix:
+            A prefix to add to the path ``dfn``. Defaults to ``""``.
+        """
+        dfn = join_paths(path_prefix, dfn, cls.route_suffix)
+
+        return URLSpec(create_urlspec_regex(dfn), cls,
+                       kwargs={"model_factory": model_factory})
+
+    def initialize(self, model_factory):
+        self.model_factory = model_factory
+
+    @inlineCallbacks
+    def prepare(self):
+        for path_var in parse_route_vars(self.route_suffix):
+            setattr(self, path_var, self.path_kwargs[path_var].encode('utf-8'))
+
+        self.model = yield self.model_factory(self)
+
+        if self.model_alias is not None:
+            setattr(self, self.model_alias, self.model)
 
     def raise_err(self, failure, status_code, reason):
         """
@@ -165,33 +256,8 @@ class CollectionHandler(BaseHandler):
     * ``POST /`` - add an item to the collection.
     """
 
-    @classmethod
-    def mk_urlspec(cls, dfn, collection_factory):
-        """
-        Constructs a :class:`URLSpec` from a path definition and
-        a collection factory. The returned :class:`URLSpec` routes
-        the constructed path to a :class:`CollectionHandler` with the
-        given ``collection_factory``.
-
-        :param str dfn:
-            A path definition suitbale for passing to
-            :func:`create_urlspec_regex`. Any path arguments will
-            appear in ``handler.path_kwargs`` on the ``handler`` passed
-            to the ``collection_factory``.
-        :param func collection_factory:
-            A function that takes a :class:`RequestHandler` instance and
-            returns an :class:`ICollection`. The collection_factory is
-            called during ``RequestHandler.prepare``.
-        """
-        return URLSpec(create_urlspec_regex(dfn + "/"), cls,
-                       kwargs={"collection_factory": collection_factory})
-
-    def initialize(self, collection_factory):
-        self.collection_factory = collection_factory
-
-    @inlineCallbacks
-    def prepare(self):
-        self.collection = yield self.collection_factory(self)
+    route_suffix = "/"
+    model_alias = "collection"
 
     def get(self, *args, **kw):
         """
@@ -242,34 +308,8 @@ class ElementHandler(BaseHandler):
     * ``DELETE /:elem_id`` - delete an element.
     """
 
-    @classmethod
-    def mk_urlspec(cls, dfn, collection_factory):
-        """
-        Constructs a :class:`URLSpec` from a path definition and
-        a collection factory. The returned :class:`URLSpec` routes
-        the constructed path, with an ``elem_id`` path suffix appended,
-        to an :class:`ElementHandler` with the given ``collection_factory``.
-
-        :param str dfn:
-            A path definition suitbale for passing to
-            :func:`create_urlspec_regex`. Any path arguments will
-            appear in ``handler.path_kwargs`` on the ``handler`` passed
-            to the ``collection_factory``.
-        :param func collection_factory:
-            A function that takes a :class:`RequestHandler` instance and
-            returns an :class:`ICollection`. The collection_factory is
-            called during ``RequestHandler.prepare``.
-        """
-        return URLSpec(create_urlspec_regex(dfn + '/:elem_id'), cls,
-                       kwargs={"collection_factory": collection_factory})
-
-    def initialize(self, collection_factory):
-        self.collection_factory = collection_factory
-
-    @inlineCallbacks
-    def prepare(self):
-        self.elem_id = self.path_kwargs['elem_id'].encode('utf-8')
-        self.collection = yield self.collection_factory(self)
+    route_suffix = ":elem_id"
+    model_alias = "collection"
 
     def get(self, *args, **kw):
         """
@@ -311,14 +351,14 @@ class ElementHandler(BaseHandler):
 
 def owner_from_header(header):
     """
-    Return a function that retrieves a collection owner id from
-    the specified HTTP header.
+    Return a function that retrieves an owner id from the specified HTTP
+    header.
 
     :param str header:
        The name of the HTTP header. E.g. ``X-Owner-ID``.
 
-    Typically used to build a collection factory that accepts
-    an owner id instead of a :class:`RequestHandler`::
+    Typically used to build a factory that accepts an owner id instead of a
+    :class:`RequestHandler`::
     """
     def owner_factory(handler):
         owner = handler.request.headers.get(header)
@@ -330,8 +370,8 @@ def owner_from_header(header):
 
 def owner_from_path_kwarg(path_kwarg):
     """
-    Return a function that retrieves a collection owner id from
-    the specified path argument.
+    Return a function that retrieves an owner id from the specified path
+    argument.
 
     :param str path_kwarg:
         The name of the path argument. E.g. ``owner_id``.
@@ -346,8 +386,8 @@ def owner_from_path_kwarg(path_kwarg):
 
 def owner_from_oauth2_bouncer(url_base):
     """
-    Return a function that retrieves a collection owner id from a call to an
-    auth service API.
+    Return a function that retrieves an owner id from a call to an auth service
+    API.
 
     :param str url_base:
         The base URL to make an auth request to.
@@ -396,17 +436,17 @@ class ApiApplication(Application):
 
     config_required = False
 
+    models = ()
     collections = ()
 
-    collection_factory_preprocessor = staticmethod(
-        owner_from_header('X-Owner-ID'))
+    factory_preprocessor = staticmethod(owner_from_header('X-Owner-ID'))
 
     def __init__(self, config_file=None, **settings):
         if self.config_required and config_file is None:
             raise ValueError(
                 "Please specify a config file using --appopts=<config.yaml>")
         config = self.get_config_settings(config_file)
-        self.setup_collection_factory_preprocessor(config)
+        self.setup_factory_preprocessor(config)
         self.initialize(settings, config)
         path_prefix = self._get_configured_path_prefix(config)
         routes = self._build_routes(path_prefix)
@@ -419,11 +459,11 @@ class ApiApplication(Application):
         """
         pass
 
-    def setup_collection_factory_preprocessor(self, config):
+    def setup_factory_preprocessor(self, config):
         # TODO: Better configuration mechanism than this.
         auth_bouncer_url = config.get('auth_bouncer_url')
         if auth_bouncer_url is not None:
-            self.collection_factory_preprocessor = (
+            self.factory_preprocessor = (
                 owner_from_oauth2_bouncer(auth_bouncer_url))
 
     def get_config_settings(self, config_file=None):
@@ -433,21 +473,45 @@ class ApiApplication(Application):
         prefix = config.get('url_path_prefix')
         return prefix or ""
 
+    def _build_route(self, path_prefix, dfn, handler, factory):
+        if self.factory_preprocessor is not None:
+            factory = compose_deferred(factory, self.factory_preprocessor)
+
+        return handler.mk_urlspec(dfn, factory, path_prefix=path_prefix)
+
+    def _build_element_routes(self, path_prefix):
+        """
+        Build up routes for handlers.
+        """
+        return [
+            self._build_route(path_prefix, dfn, ElementHandler, factory)
+            for dfn, factory in self.collections]
+
+    def _build_collection_routes(self, path_prefix):
+        """
+        Build up routes for handlers.
+        """
+        return [
+            self._build_route(path_prefix, dfn, CollectionHandler, factory)
+            for dfn, factory in self.collections]
+
+    def _build_model_routes(self, path_prefix):
+        """
+        Build up routes for handlers.
+        """
+        return [
+            self._build_route(path_prefix, dfn, handler, factory)
+            for dfn, handler, factory in self.models]
+
     def _build_routes(self, path_prefix=""):
         """
         Build up routes for handlers from collections and
         extra routes.
         """
         routes = [URLSpec('/health/', HealthHandler)]
-        for dfn, collection_factory in self.collections:
-            dfn = "/".join([path_prefix.rstrip("/"), dfn.lstrip("/")])
-            if self.collection_factory_preprocessor is not None:
-                collection_factory = compose_deferred(
-                    collection_factory, self.collection_factory_preprocessor)
-            routes.extend((
-                CollectionHandler.mk_urlspec(dfn, collection_factory),
-                ElementHandler.mk_urlspec(dfn, collection_factory),
-            ))
+        routes.extend(self._build_collection_routes(path_prefix))
+        routes.extend(self._build_element_routes(path_prefix))
+        routes.extend(self._build_model_routes(path_prefix))
         return routes
 
     def log_request(self, handler):
