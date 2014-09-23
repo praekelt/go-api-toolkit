@@ -494,7 +494,6 @@ class ApiApplication(Application):
         routes.extend(self._build_collection_routes(path_prefix))
         routes.extend(self._build_element_routes(path_prefix))
         routes.extend(self._build_model_routes(path_prefix))
-        print routes
         return routes
 
     def log_request(self, handler):
