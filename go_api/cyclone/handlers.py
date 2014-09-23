@@ -16,17 +16,30 @@ from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
 def join_paths(*paths):
+    """
+    Joins together the given paths with a '/'.
+
+    .. code-block::
+
+        join_paths("/foo/", "/bar/", "baz", "/quux/")
+        # => /foo/bar/baz/quux/
+    """
+    # filter out empty strings
     paths = [p for p in paths if p]
 
+    # simply return a single path or no paths (e.g. '/')
     if len(paths) < 2:
         return "".join(paths)
 
-    parts = [p.lstrip("/").rstrip("/") for p in paths]
-    result = "/".join(p for p in parts if p)
+    # strip out leading and trailing slashes
+    stripped = [p.strip("/") for p in paths]
+    result = "/".join(p for p in stripped if p)
 
+    # bring back the first leading slash if relevant
     if paths[0].startswith("/"):
         result = "/" + result
 
+    # bring back the last trailing slash if relevant
     if paths[-1].endswith("/"):
         result = result + "/"
 
