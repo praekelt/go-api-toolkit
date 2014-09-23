@@ -12,9 +12,10 @@ from cyclone.web import HTTPError
 from go_api.collections import InMemoryCollection
 from go_api.collections.errors import CollectionUsageError
 from go_api.cyclone.handlers import (
-    BaseHandler, CollectionHandler, ElementHandler,
-    join_paths, parse_route_vars, create_urlspec_regex, ApiApplication,
-    owner_from_header, owner_from_path_kwarg, owner_from_oauth2_bouncer)
+    RouteParseError, BaseHandler, CollectionHandler, ElementHandler,
+    duplicates, join_paths, parse_route_vars, create_urlspec_regex,
+    ApiApplication, owner_from_header, owner_from_path_kwarg,
+    owner_from_oauth2_bouncer)
 from go_api.cyclone.helpers import HandlerHelper, AppHelper, MockHttpServer
 
 
@@ -70,6 +71,14 @@ class TestJoinPaths(TestCase):
             "foo/bar/baz")
 
 
+class TestDuplicates(TestCase):
+    def test_none(self):
+        self.assertEqual(duplicates([1, 2, 3]), set())
+
+    def test_duplicates(self):
+        self.assertEqual(duplicates([1, 2, 1, 3, 2, 1]), set([1, 2]))
+
+
 class TestParseRouteVars(TestCase):
     def test_no_variables(self):
         self.assertEqual(parse_route_vars("/foo/bar"), [])
@@ -78,6 +87,11 @@ class TestParseRouteVars(TestCase):
         self.assertEqual(parse_route_vars("/:foo/bar"), ["foo"])
 
     def test_two_variables(self):
+        self.assertEqual(
+            parse_route_vars("/:foo/bar/:baz"),
+            ["foo", "baz"])
+
+    def test_duplicate_variables(self):
         self.assertEqual(
             parse_route_vars("/:foo/bar/:baz"),
             ["foo", "baz"])
@@ -105,6 +119,12 @@ class TestCreateUrlspecRegex(TestCase):
 
     def test_standalone_slash(self):
         self.assertEqual(create_urlspec_regex("/"), "/")
+
+    def test_duplicate_vars(self):
+        self.assertRaises(
+            RouteParseError,
+            create_urlspec_regex,
+            "/:foo/:bar/baz/:bar/:foo")
 
 
 class TestBaseHandler(TestCase):

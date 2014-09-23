@@ -15,6 +15,10 @@ from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
 
 
+class RouteParseError(Exception):
+    "Raised when an erroneous route is parsed"
+
+
 def join_paths(*paths):
     """
     Joins together the given paths with a '/'.
@@ -46,8 +50,15 @@ def join_paths(*paths):
     return result
 
 
+def duplicates(values):
+    if len(values) == len(set(values)):
+        return set([])
+
+    return set([v for v in values if values.count(v) > 1])
+
+
 def parse_route_vars(dfn):
-    return [p.lstrip(":") for p in dfn.split("/") if p.startswith(":")]
+   return [p.lstrip(":") for p in dfn.split("/") if p.startswith(":")]
 
 
 def create_urlspec_regex(dfn):
@@ -62,6 +73,12 @@ def create_urlspec_regex(dfn):
 
       /foo/(?P<var>[^/]*)/baz/(?P<other_var>[^/]*)
     """
+    duplicate_vars = duplicates(parse_route_vars(dfn))
+    if duplicate_vars:
+        raise RouteParseError(
+            "Duplicate route variables found: %s" %
+            (",".join(duplicate_vars),))
+
     def replace_part(part):
         if not part.startswith(':'):
             return part
@@ -108,6 +125,7 @@ class BaseHandler(RequestHandler):
             called during ``RequestHandler.prepare``.
         """
         dfn = join_paths(path_prefix, dfn, cls.route_suffix)
+
         return URLSpec(create_urlspec_regex(dfn), cls,
                        kwargs={"model_factory": model_factory})
 
