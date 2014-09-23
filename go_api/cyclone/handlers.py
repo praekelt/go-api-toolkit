@@ -108,8 +108,8 @@ class BaseHandler(RequestHandler):
     def mk_urlspec(cls, dfn, model_factory, path_prefix=""):
         """
         Constructs a :class:`URLSpec` from a path definition and
-        a collection factory. The returned :class:`URLSpec` routes
-        the constructed path to a :class:`CollectionHandler` with the
+        a model factory. The returned :class:`URLSpec` routes
+        the constructed path to a :class:`BaseHandler` with the
         given ``model_factory``.
 
         :param str dfn:
@@ -119,7 +119,7 @@ class BaseHandler(RequestHandler):
             to the ``model_factory``.
         :param func model_factory:
             A function that takes a :class:`RequestHandler` instance and
-            returns an :class:`ICollection`. The model_factory is
+            returns a model instance. The model_factory is
             called during ``RequestHandler.prepare``.
         """
         dfn = join_paths(path_prefix, dfn, cls.route_suffix)
