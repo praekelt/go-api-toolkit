@@ -55,7 +55,7 @@ def duplicates(values):
 
 
 def parse_route_vars(dfn):
-   return [p.lstrip(":") for p in dfn.split("/") if p.startswith(":")]
+    return [p.lstrip(":") for p in dfn.split("/") if p.startswith(":")]
 
 
 def create_urlspec_regex(dfn):
