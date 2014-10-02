@@ -134,6 +134,8 @@ class BaseHandler(RequestHandler):
 
     @inlineCallbacks
     def prepare(self):
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
+
         for path_var in parse_route_vars(self.route_suffix):
             setattr(self, path_var, self.path_kwargs[path_var].encode('utf-8'))
 
@@ -192,6 +194,7 @@ class BaseHandler(RequestHandler):
             # in debug mode, try to send a traceback
             error_data["traceback"] = traceback.format_exception(
                 *kw["exc_info"])
+
         self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.finish(json.dumps(error_data))
 

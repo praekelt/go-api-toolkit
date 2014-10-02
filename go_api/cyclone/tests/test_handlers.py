@@ -5,9 +5,10 @@ import yaml
 
 from twisted.trial.unittest import TestCase
 from twisted.python.failure import Failure
-from twisted.internet.defer import inlineCallbacks, succeed, returnValue
+from twisted.internet.defer import (
+    maybeDeferred, inlineCallbacks, succeed, returnValue)
 
-from cyclone.web import HTTPError
+from cyclone.web import Application, HTTPError
 
 from go_api.collections import InMemoryCollection
 from go_api.collections.errors import CollectionUsageError
@@ -265,6 +266,43 @@ class TestBaseHandler(TestCase):
         handler.prepare()
         self.assertEqual(handler.foo, "bar")
         self.assertEqual(handler.baz, "quux")
+
+    @inlineCallbacks
+    def test_success_content_type(self):
+        class ToyHandler(BaseHandler):
+            def get(self):
+                self.write_object({})
+
+        helper = AppHelper(Application([
+            ('/', ToyHandler, {'model_factory': lambda _: None})
+        ]))
+
+        resp = yield helper.get('/')
+
+        self.assertEqual(
+            resp.headers.getRawHeaders('Content-Type'),
+            ['application/json; charset=utf-8'])
+
+    @inlineCallbacks
+    def test_error_content_type(self):
+        class ToyHandler(BaseHandler):
+            def fail(self):
+                raise DummyError("Moop")
+
+            def get(self):
+                d = maybeDeferred(self.fail)
+                d.addErrback(self.catch_err, 400, DummyError)
+                return d
+
+        helper = AppHelper(Application([
+            ('/', ToyHandler, {'model_factory': lambda _: None})
+        ]))
+
+        resp = yield helper.get('/')
+
+        self.assertEqual(
+            resp.headers.getRawHeaders('Content-Type'),
+            ['application/json; charset=utf-8'])
 
 
 class BaseHandlerTestCase(TestCase):
