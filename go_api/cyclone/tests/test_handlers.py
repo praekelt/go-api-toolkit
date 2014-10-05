@@ -268,10 +268,9 @@ class TestBaseHandler(TestCase):
         self.assertEqual(handler.baz, "quux")
 
     @inlineCallbacks
-    def test_success_content_type(self):
+    def _check_content_type(self, do_get, content_type):
         class ToyHandler(BaseHandler):
-            def get(self):
-                self.write_object({})
+            get = do_get
 
         helper = AppHelper(Application([
             ('/', ToyHandler, {'model_factory': lambda _: None})
@@ -281,28 +280,40 @@ class TestBaseHandler(TestCase):
 
         self.assertEqual(
             resp.headers.getRawHeaders('Content-Type'),
-            ['application/json; charset=utf-8'])
+            [content_type])
 
     @inlineCallbacks
-    def test_error_content_type(self):
-        class ToyHandler(BaseHandler):
-            def fail(self):
-                raise DummyError("Moop")
+    def test_write_error_content_type(self):
+        def fail():
+            raise DummyError("Moop")
 
-            def get(self):
-                d = maybeDeferred(self.fail)
-                d.addErrback(self.catch_err, 400, DummyError)
-                return d
+        def get(self):
+            d = maybeDeferred(fail)
+            d.addErrback(self.catch_err, 400, DummyError)
+            return d
 
-        helper = AppHelper(Application([
-            ('/', ToyHandler, {'model_factory': lambda _: None})
-        ]))
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
 
-        resp = yield helper.get('/')
+    @inlineCallbacks
+    def test_write_object_content_type(self):
+        def get(self):
+            self.write_object({})
 
-        self.assertEqual(
-            resp.headers.getRawHeaders('Content-Type'),
-            ['application/json; charset=utf-8'])
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_objects_content_type(self):
+        def get(self):
+            self.write_objects([{}, {}])
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_page_content_type(self):
+        def get(self):
+            self.write_page(("cursor", {}))
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
 
 
 class BaseHandlerTestCase(TestCase):
