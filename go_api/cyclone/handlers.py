@@ -192,6 +192,7 @@ class BaseHandler(RequestHandler):
             # in debug mode, try to send a traceback
             error_data["traceback"] = traceback.format_exception(
                 *kw["exc_info"])
+
         self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.finish(json.dumps(error_data))
 
@@ -202,6 +203,7 @@ class BaseHandler(RequestHandler):
         :param dict obj:
             JSON serializable object to write out.
         """
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.write(json.dumps(obj))
 
     @inlineCallbacks
@@ -212,11 +214,12 @@ class BaseHandler(RequestHandler):
         :param list objs:
             List of dictionaries to write out.
         """
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
         for obj_deferred in objs:
             obj = yield obj_deferred
             if obj is None:
                 continue
-            yield self.write_object(obj)
+            self.write(json.dumps(obj))
             self.write("\n")
 
     def write_page(self, result):
@@ -234,6 +237,7 @@ class BaseHandler(RequestHandler):
             'cursor': cursor,
             'data': data,
         }
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.write(json.dumps(page))
 
     def parse_json(self, data):
