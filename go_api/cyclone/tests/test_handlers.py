@@ -5,9 +5,10 @@ import yaml
 
 from twisted.trial.unittest import TestCase
 from twisted.python.failure import Failure
-from twisted.internet.defer import inlineCallbacks, succeed, returnValue
+from twisted.internet.defer import (
+    maybeDeferred, inlineCallbacks, succeed, returnValue)
 
-from cyclone.web import HTTPError
+from cyclone.web import Application, HTTPError
 
 from go_api.collections import InMemoryCollection
 from go_api.collections.errors import CollectionUsageError
@@ -265,6 +266,54 @@ class TestBaseHandler(TestCase):
         handler.prepare()
         self.assertEqual(handler.foo, "bar")
         self.assertEqual(handler.baz, "quux")
+
+    @inlineCallbacks
+    def _check_content_type(self, do_get, content_type):
+        class ToyHandler(BaseHandler):
+            get = do_get
+
+        helper = AppHelper(Application([
+            ('/', ToyHandler, {'model_factory': lambda _: None})
+        ]))
+
+        resp = yield helper.get('/')
+
+        self.assertEqual(
+            resp.headers.getRawHeaders('Content-Type'),
+            [content_type])
+
+    @inlineCallbacks
+    def test_write_error_content_type(self):
+        def fail():
+            raise DummyError("Moop")
+
+        def get(self):
+            d = maybeDeferred(fail)
+            d.addErrback(self.catch_err, 400, DummyError)
+            return d
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_object_content_type(self):
+        def get(self):
+            self.write_object({})
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_objects_content_type(self):
+        def get(self):
+            self.write_objects([{}, {}])
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_page_content_type(self):
+        def get(self):
+            self.write_page(("cursor", {}))
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
 
 
 class BaseHandlerTestCase(TestCase):
