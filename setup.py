@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="go_api",
-    version="0.2.2a",
+    version="0.2.3a",
     url='http://github.com/praekelt/go-api-toolkit',
     license='BSD',
     description="A toolkit for building Vumi Go APIs",
