@@ -33,7 +33,7 @@ class TestPausingDeferredQueue(
 
     def test_empty_queue_underflow(self):
         """
-        When the total amount of deferred gets is exceeded, a QueueUnderflow
+        When the total amount of deferred gets is exceeded, a L{QueueUnderflow}
         error is raised.
         """
         for i in range(self.backlog):
@@ -82,8 +82,8 @@ class TestPausingDeferredQueue(
 
     def test_queue_overflow(self):
         """
-        If you try to add more elements than size, a QueueOverflow error will
-        be thrown.
+        If you try to add more elements than size, a L{QueueOverflow} error
+        will be thrown.
         """
         for i in range(self.size):
             self.q.put(i)
@@ -106,15 +106,15 @@ class TestPausingDeferredQueue(
 
     def test_zero_size_overflow(self):
         """
-        A QueueOverflow error is raised when there is a put request on a queue
-        of size 0
+        A L{QueueOverflow} error is raised when there is a put request on a
+        queue of size 0
         """
         self.q = PausingDeferredQueue(size=0)
         self.assertRaises(defer.QueueOverflow, self.q.put, None)
 
     def test_zero_backlog_underflow(self):
         """
-        A QueueUnderflow error is raised when there is a get request on a
+        A L{QueueUnderflow} error is raised when there is a get request on a
         queue with a backlog of 0.
         """
         queue = PausingDeferredQueue(backlog=0)
