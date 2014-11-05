@@ -53,8 +53,6 @@ class PausingDeferredQueue(object):
         elif self.size is None or len(self.pending) < self.size:
             self.pending.append(obj)
             if len(self.pending) == self.size:
-                # We should never have a pending put if we aren't already full.
-                assert self._pending_put is None
                 self._pending_put = Deferred()
                 return self._pending_put
             # We still have space, so return an already-fired deferred.
