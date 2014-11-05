@@ -4,7 +4,7 @@ Tests for the in-memory collection.
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import (
-    inlineCallbacks, gatherResults, maybeDeferred)
+    inlineCallbacks, maybeDeferred, returnValue)
 from zope.interface.verify import verifyObject
 
 from go_api.collections.errors import (
@@ -19,6 +19,7 @@ class TestInMemoryCollection(TestCase):
     Tests from the in-memory collection.
     """
 
+    @inlineCallbacks
     def filtered_stream(self, collection):
         """
         Get all objects in a collection. Some backends may have some index
@@ -27,11 +28,17 @@ class TestInMemoryCollection(TestCase):
 
         This waits for all deferreds to fire before returning.
         """
-        d = collection.stream(query=None)
-        d.addCallback(lambda objs: [maybeDeferred(lambda: o) for o in objs])
-        d.addCallback(gatherResults)
-        d.addCallback(lambda objs: [o for o in objs if o is not None])
-        return d
+        q = yield collection.stream(query=None)
+        objs = []
+        while True:
+            obj = yield q.get()
+            if obj is None:
+                continue
+            if obj is False:
+                break
+            objs.append(obj)
+
+        returnValue(objs)
 
     def ensure_equal(self, foo, bar, msg=None):
         """
@@ -110,8 +117,7 @@ class TestInMemoryCollection(TestCase):
         CollectionUsageError.
         """
         collection = InMemoryCollection()
-        self.failUnlessFailure(collection.stream('q'),
-                               CollectionUsageError)
+        self.failUnlessFailure(collection.stream('q'), CollectionUsageError)
 
     @inlineCallbacks
     def test_page_empty(self):
