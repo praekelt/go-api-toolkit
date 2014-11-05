@@ -45,8 +45,8 @@ class PausingDeferredQueue(object):
         """
         Add an object to this queue.
 
-        @return: a L{Deferred} which fires with None when the object is placed
-        in the queue.
+        @return: a L{Deferred} which fires with None when the queue is ready
+        to accept another object.
 
         @raise QueueOverflow: Too many objects are in this queue.
         """
