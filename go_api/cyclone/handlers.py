@@ -242,6 +242,7 @@ class BaseHandler(RequestHandler):
 
     @inlineCallbacks
     def write_queue(self, q):
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
         while True:
             obj = yield q.get()
             if obj is None:

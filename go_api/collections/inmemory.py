@@ -5,7 +5,8 @@ An in-memory ICollection implementation.
 from copy import deepcopy
 from uuid import uuid4
 
-from twisted.internet.defer import DeferredQueue, inlineCallbacks
+from go_api.queue import PausingDeferredQueue
+from twisted.internet.defer import inlineCallbacks
 from zope.interface import implementer
 
 from .interfaces import ICollection
@@ -72,16 +73,15 @@ class InMemoryCollection(object):
             raise CollectionUsageError(
                 'query parameter not supported by InMemoryCollection')
 
-        q = DeferredQueue(backlog=1)
+        q = PausingDeferredQueue(backlog=1, size=1)
 
-        @simulate_async
         @inlineCallbacks
-        def fill_queue(queue):
+        def fill_queue():
             for object_id in self._get_keys():
                 yield q.put(self._get_data(object_id))
             yield q.put(False)
 
-        fill_queue(q)
+        fill_queue()
         return q
 
     @simulate_async
