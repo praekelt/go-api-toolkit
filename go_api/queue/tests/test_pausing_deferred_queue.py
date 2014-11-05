@@ -26,106 +26,104 @@ class ImmediateFailureMixin(object):
 class TestPausingDeferredQueue(
         unittest.SynchronousTestCase, ImmediateFailureMixin):
 
-    def testQueue(self):
-        N, M = 2, 2
-        queue = defer.DeferredQueue(N, M)
+    def setUp(self):
+        self.size = 3
+        self.backlog = 2
+        self.q = PausingDeferredQueue(size=self.size, backlog=self.backlog)
 
+    def test_empty_queue_underflow(self):
+        """
+        This test ensures that when the amount of deferred gets is exceeded,
+        a QueueUnderflow error is raised.
+        """
+        for i in range(self.backlog):
+            self.q.get()
+        self.assertRaises(defer.QueueUnderflow, self.q.get)
+
+    def test_backlog_queue(self):
+        """
+        This test ensures that if there is a backlog of gets for a queue, they
+        are fulfilled when values are placed into the queue.
+        """
         gotten = []
-
-        for i in range(M):
-            queue.get().addCallback(gotten.append)
-        self.assertRaises(defer.QueueUnderflow, queue.get)
-
-        for i in range(M):
-            queue.put(i)
-            self.assertEqual(gotten, list(range(i + 1)))
-        for i in range(N):
-            queue.put(N + i)
-            self.assertEqual(gotten, list(range(M)))
-        self.assertRaises(defer.QueueOverflow, queue.put, None)
-
-        gotten = []
-        for i in range(N):
-            queue.get().addCallback(gotten.append)
-            self.assertEqual(gotten, list(range(N, N + i + 1)))
-
-        queue = defer.DeferredQueue()
-        gotten = []
-        for i in range(N):
-            queue.get().addCallback(gotten.append)
-        for i in range(N):
-            queue.put(i)
-        self.assertEqual(gotten, list(range(N)))
-
-        queue = defer.DeferredQueue(size=0)
-        self.assertRaises(defer.QueueOverflow, queue.put, None)
-
-        queue = defer.DeferredQueue(backlog=0)
-        self.assertRaises(defer.QueueUnderflow, queue.get)
-
-    def test_PausingDeferredQueue(self):
-        N, M = 3, 2
-        queue = PausingDeferredQueue(N, M)
-
-        gotten = []
-
-        for i in range(M):
-            queue.get().addCallback(gotten.append)
-        self.assertRaises(defer.QueueUnderflow, queue.get)
-
-        for i in range(M):
-            d = queue.put(i)
+        # Create backlog
+        for i in range(self.backlog):
+            self.q.get().addCallback(gotten.append)
+        # Fill queue to satisfy backlog
+        for i in range(self.backlog):
+            d = self.q.put(i)
             self.assertEqual(self.successResultOf(d), None)
             self.assertEqual(gotten, list(range(i + 1)))
 
-        for i in range(N - 1):
-            d = queue.put(M + i)
+    def test_fill_queue(self):
+        """
+        This test ensures that we can create a queue of size size. If we try
+        to add another object to the queue, the returned defer will only fire
+        if an object is removed from the queue.
+        """
+        for i in range(self.size - 1):
+            d = self.q.put(i)
             self.assertEqual(self.successResultOf(d), None)
-            self.assertEqual(gotten, list(range(M)))
 
         # This next put fills the queue, so the deferred we return will only
         # get its result when the queue shrinks.
-        put_d = queue.put(N + M - 1)
+        put_d = self.q.put(self.size)
         self.assertNoResult(put_d)
-
-        # We already have a pending put, so we raise an exception.
-        self.assertRaises(defer.QueueOverflow, queue.put, None)
 
         # When we pull something out of the queue, put_d fires and we're able
         # to put another thing into the queue.
         gotten = []
-        queue.get().addCallback(gotten.append)
-        self.assertEqual(gotten, [M])
+        self.q.get().addCallback(gotten.append)
+        self.assertEqual(gotten, [0])
         self.assertEqual(self.successResultOf(put_d), None)
 
-        put_d = queue.put(N + M)
+        put_d = self.q.put(self.size)
         self.assertNoResult(put_d)
 
-        # Pull the remaining things out of the queue.
-        for i in range(N):
-            queue.get().addCallback(gotten.append)
-            self.assertEqual(gotten, list(range(M, M + i + 2)))
+    def test_queue_overflow(self):
+        """
+        This test ensures that if you try to add more elements than size, that
+        a QueueOverflow error will be thrown.
+        """
+        for i in range(self.size):
+            self.q.put(i)
 
-        # Things are simpler when we have no limits.
-        queue = PausingDeferredQueue()
+        self.assertRaises(defer.QueueOverflow, self.q.put, None)
+
+    def test_queue_no_limits(self):
+        """
+        This test makes sure that we can put and get objects from the queue
+        when there are no limits supplied.
+        """
+        self.q = PausingDeferredQueue()
         gotten = []
-        for i in range(N):
-            queue.get().addCallback(gotten.append)
-        for i in range(N):
-            d = queue.put(i)
+        for i in range(self.size):
+            self.q.get().addCallback(gotten.append)
+        for i in range(self.size):
+            d = self.q.put(i)
             self.assertEqual(self.successResultOf(d), None)
-        self.assertEqual(gotten, list(range(N)))
+        self.assertEqual(gotten, list(range(self.size)))
 
-        queue = PausingDeferredQueue(size=0)
-        self.assertRaises(defer.QueueOverflow, queue.put, None)
+    def test_zero_size_overflow(self):
+        """
+        This test ensures that a QueueOverflow error is raised when there is a
+        put request on a queue of size 0
+        """
+        self.q = PausingDeferredQueue(size=0)
+        self.assertRaises(defer.QueueOverflow, self.q.put, None)
 
+    def test_zero_backlog_underflow(self):
+        """
+        This test ensures that a QueueUnderflow error is raised when there is a
+        get request on a queue with a backlog of 0.
+        """
         queue = PausingDeferredQueue(backlog=0)
         self.assertRaises(defer.QueueUnderflow, queue.get)
 
     def test_cancelQueueAfterSynchronousGet(self):
         """
-        When canceling a L{Deferred} from a L{PausingDeferredQueue} that already has
-        a result, the cancel should have no effect.
+        When canceling a L{Deferred} from a L{PausingDeferredQueue} that
+        already has a result, the cancel should have no effect.
         """
         def _failOnErrback(_):
             self.fail("Unexpected errback call!")
@@ -138,8 +136,8 @@ class TestPausingDeferredQueue(
 
     def test_cancelQueueAfterGet(self):
         """
-        When canceling a L{Deferred} from a L{PausingDeferredQueue} that does not
-        have a result (i.e., the L{Deferred} has not fired), the cancel
+        When canceling a L{Deferred} from a L{PausingDeferredQueue} that does
+        not have a result (i.e., the L{Deferred} has not fired), the cancel
         causes a L{defer.CancelledError} failure. If the queue has a result
         later on, it doesn't try to fire the deferred.
         """
