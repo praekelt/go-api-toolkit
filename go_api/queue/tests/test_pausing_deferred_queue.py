@@ -33,8 +33,8 @@ class TestPausingDeferredQueue(
 
     def test_empty_queue_underflow(self):
         """
-        This test ensures that when the amount of deferred gets is exceeded,
-        a QueueUnderflow error is raised.
+        When the total amount of deferred gets is exceeded, a QueueUnderflow
+        error is raised.
         """
         for i in range(self.backlog):
             self.q.get()
@@ -42,8 +42,8 @@ class TestPausingDeferredQueue(
 
     def test_backlog_queue(self):
         """
-        This test ensures that if there is a backlog of gets for a queue, they
-        are fulfilled when values are placed into the queue.
+        If there is a backlog of gets for a queue, they are fulfilled when
+        values are placed into the queue.
         """
         gotten = []
         # Create backlog
@@ -57,9 +57,9 @@ class TestPausingDeferredQueue(
 
     def test_fill_queue(self):
         """
-        This test ensures that we can create a queue of size size. If we try
-        to add another object to the queue, the returned defer will only fire
-        if an object is removed from the queue.
+        A queue of size size is created and filled. If we try to add another
+        object to the queue, the returned defer will only fire if an object is
+        removed from the queue.
         """
         for i in range(self.size - 1):
             d = self.q.put(i)
@@ -82,8 +82,8 @@ class TestPausingDeferredQueue(
 
     def test_queue_overflow(self):
         """
-        This test ensures that if you try to add more elements than size, that
-        a QueueOverflow error will be thrown.
+        If you try to add more elements than size, a QueueOverflow error will
+        be thrown.
         """
         for i in range(self.size):
             self.q.put(i)
@@ -92,8 +92,8 @@ class TestPausingDeferredQueue(
 
     def test_queue_no_limits(self):
         """
-        This test makes sure that we can put and get objects from the queue
-        when there are no limits supplied.
+        You can put and get objects from the queue when there are no limits
+        supplied.
         """
         self.q = PausingDeferredQueue()
         gotten = []
@@ -106,16 +106,16 @@ class TestPausingDeferredQueue(
 
     def test_zero_size_overflow(self):
         """
-        This test ensures that a QueueOverflow error is raised when there is a
-        put request on a queue of size 0
+        A QueueOverflow error is raised when there is a put request on a queue
+        of size 0
         """
         self.q = PausingDeferredQueue(size=0)
         self.assertRaises(defer.QueueOverflow, self.q.put, None)
 
     def test_zero_backlog_underflow(self):
         """
-        This test ensures that a QueueUnderflow error is raised when there is a
-        get request on a queue with a backlog of 0.
+        A QueueUnderflow error is raised when there is a get request on a
+        queue with a backlog of 0.
         """
         queue = PausingDeferredQueue(backlog=0)
         self.assertRaises(defer.QueueUnderflow, queue.get)
