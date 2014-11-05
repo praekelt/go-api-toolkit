@@ -240,6 +240,17 @@ class BaseHandler(RequestHandler):
         self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.write(json.dumps(page))
 
+    @inlineCallbacks
+    def write_queue(self, q):
+        while True:
+            obj = yield q.get()
+            if obj is None:
+                continue
+            if obj is False:
+                break
+            self.write(json.dumps(obj))
+            self.write("\n")
+
     def parse_json(self, data):
         try:
             return json.loads(data)
@@ -271,7 +282,7 @@ class CollectionHandler(BaseHandler):
         stream = self.get_argument('stream', default='false')
         if stream == 'true':
             d = maybeDeferred(self.collection.stream, query=query)
-            d.addCallback(self.write_objects)
+            d.addCallback(self.write_queue)
         else:
             cursor = self.get_argument('cursor', default=None)
             max_results = self.get_argument('max_results', default=None)
