@@ -76,8 +76,13 @@ class PausingDeferredQueue(object):
         if self.pending:
             result = self.pending.pop(0)
             if self._pending_put is not None:
-                self._pending_put.callback(None)
+                # We need to replace this deferred with None before firing it,
+                # because its callback may add a new item to the queue which
+                # would could replace self._pending_put and cause us to clear a
+                # pending deferred instead of a fired one.
+                pending_put = self._pending_put
                 self._pending_put = None
+                pending_put.callback(None)
             return succeed(result)
         elif self.backlog is None or len(self.waiting) < self.backlog:
             d = Deferred(canceller=self._cancelGet)
