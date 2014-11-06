@@ -77,7 +77,7 @@ class InMemoryCollection(object):
 
         @inlineCallbacks
         def fill_queue():
-            for object_id in self._get_keys():
+            for object_id in sorted(self._get_keys()):
                 yield q.put(self._get_data(object_id))
             yield q.put(PausingQueueCloseMarker())
 
