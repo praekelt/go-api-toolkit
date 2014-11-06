@@ -2,6 +2,10 @@ from twisted.internet.defer import (
     QueueOverflow, QueueUnderflow, Deferred, succeed)
 
 
+class PausingQueueCloseMarker(object):
+    "This is a marker for the closing a L{PausingDeferredQueue}"
+
+
 class PausingDeferredQueue(object):
     """
     An event driven queue.
