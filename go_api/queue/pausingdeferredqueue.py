@@ -3,7 +3,7 @@ from twisted.internet.defer import (
 
 
 class PausingQueueCloseMarker(object):
-    "This is a marker for the closing a L{PausingDeferredQueue}"
+    "This is a marker for closing a L{PausingDeferredQueue}"
 
 
 class PausingDeferredQueue(object):
