@@ -5,7 +5,7 @@ An in-memory ICollection implementation.
 from copy import deepcopy
 from uuid import uuid4
 
-from go_api.queue import PausingDeferredQueue
+from go_api.queue import PausingDeferredQueue, PausingQueueCloseMarker
 from twisted.internet.defer import inlineCallbacks
 from zope.interface import implementer
 
@@ -79,7 +79,7 @@ class InMemoryCollection(object):
         def fill_queue():
             for object_id in self._get_keys():
                 yield q.put(self._get_data(object_id))
-            yield q.put(False)
+            yield q.put(PausingQueueCloseMarker())
 
         q.fill_d = fill_queue()
         return q
