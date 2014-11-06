@@ -73,7 +73,7 @@ class InMemoryCollection(object):
             raise CollectionUsageError(
                 'query parameter not supported by InMemoryCollection')
 
-        q = PausingDeferredQueue(backlog=1, size=1)
+        q = PausingDeferredQueue(backlog=1, size=3)
 
         @inlineCallbacks
         def fill_queue():
