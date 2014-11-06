@@ -81,7 +81,7 @@ class InMemoryCollection(object):
                 yield q.put(self._get_data(object_id))
             yield q.put(False)
 
-        fill_queue()
+        q.fill_d = fill_queue()
         return q
 
     @simulate_async
