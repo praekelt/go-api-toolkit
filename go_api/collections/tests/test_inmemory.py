@@ -12,6 +12,7 @@ from go_api.collections.errors import (
     CollectionUsageError)
 from go_api.collections.inmemory import InMemoryCollection
 from go_api.collections.interfaces import ICollection
+from go_api.queue.pausingdeferredqueue import PausingQueueCloseMarker
 
 
 class TestInMemoryCollection(TestCase):
@@ -34,7 +35,7 @@ class TestInMemoryCollection(TestCase):
             obj = yield q.get()
             if obj is None:
                 continue
-            if obj is False:
+            if isinstance(obj, PausingQueueCloseMarker):
                 break
             objs.append(obj)
 

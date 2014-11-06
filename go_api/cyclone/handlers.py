@@ -13,6 +13,7 @@ from twisted.python import log
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 
 from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
+from ..queue.pausingdeferredqueue import PausingQueueCloseMarker
 
 
 class RouteParseError(Exception):
@@ -247,7 +248,7 @@ class BaseHandler(RequestHandler):
             obj = yield q.get()
             if obj is None:
                 continue
-            if obj is False:
+            if isinstance(obj, PausingQueueCloseMarker):
                 break
             self.write(json.dumps(obj))
             self.write("\n")
