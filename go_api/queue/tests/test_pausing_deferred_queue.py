@@ -81,6 +81,34 @@ class TestPausingDeferredQueue(
         put_d = q.put(size)
         self.assertNoResult(put_d)
 
+    def test_get_with_pending_put(self):
+        """
+        A put() call in a callback on a deferred returned from put() may be
+        called synchronously before the get() that triggers it returns, so
+        get() must handle this safely.
+        """
+        @defer.inlineCallbacks
+        def fill_queue(q):
+            for i in [0, 1, 2]:
+                yield q.put(i)
+
+        q = PausingDeferredQueue(size=1)
+        fill_d = fill_queue(q)
+        self.assertNoResult(fill_d)
+
+        gotten = []
+        q.get().addCallback(gotten.append)
+        self.assertEqual(gotten, [0])
+        self.assertNoResult(fill_d)
+
+        q.get().addCallback(gotten.append)
+        self.assertEqual(gotten, [0, 1])
+        self.assertNoResult(fill_d)
+
+        q.get().addCallback(gotten.append)
+        self.assertEqual(gotten, [0, 1, 2])
+        self.successResultOf(fill_d)
+
     def test_queue_overflow(self):
         """
         If you try to add more elements than size, a L{QueueOverflow} error

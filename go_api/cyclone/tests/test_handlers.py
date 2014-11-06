@@ -334,6 +334,9 @@ class TestCollectionHandler(BaseHandlerTestCase):
         self.collection_data = {
             "obj1": {"id": "obj1"},
             "obj2": {"id": "obj2"},
+            "obj3": {"id": "obj3"},
+            "obj4": {"id": "obj4"},
+            "obj5": {"id": "obj5"},
         }
         self.collection = InMemoryCollection(self.collection_data)
         self.model_factory = lambda req: self.collection
@@ -348,7 +351,15 @@ class TestCollectionHandler(BaseHandlerTestCase):
     def test_get_stream(self):
         data = yield self.app_helper.get('/root/?stream=true',
                                          parser='json_lines')
-        self.assertEqual(data, [{"id": "obj1"}, {"id": "obj2"}])
+        self.assertEqual(
+            data,
+            [
+                {"id": "obj1"},
+                {"id": "obj2"},
+                {"id": "obj3"},
+                {"id": "obj4"},
+                {"id": "obj5"},
+            ])
 
     @inlineCallbacks
     def test_get_page(self):
@@ -359,6 +370,9 @@ class TestCollectionHandler(BaseHandlerTestCase):
             u'data': [
                 {u'id': u'obj1'},
                 {u'id': u'obj2'},
+                {u'id': u'obj3'},
+                {u'id': u'obj4'},
+                {u'id': u'obj5'},
             ],
         })
 
@@ -372,14 +386,25 @@ class TestCollectionHandler(BaseHandlerTestCase):
 
     @inlineCallbacks
     def test_get_page_multiple(self):
-        data = yield self.app_helper.get('/root/?max_results=1', parser='json')
-        self.assertEqual(data[u'cursor'], 1)
-        self.assertEqual(data[u'data'], [{u'id': u'obj1'}])
+        data = yield self.app_helper.get('/root/?max_results=3', parser='json')
+        self.assertEqual(data[u'cursor'], 3)
+        self.assertEqual(
+            data[u'data'],
+            [
+                {u'id': u'obj1'},
+                {u'id': u'obj2'},
+                {u'id': u'obj3'},
+            ])
 
-        data = yield self.app_helper.get('/root/?max_results=1&cursor=1',
+        data = yield self.app_helper.get('/root/?max_results=3&cursor=3',
                                          parser='json')
         self.assertEqual(data[u'cursor'], None)
-        self.assertEqual(data[u'data'], [{u'id': u'obj2'}])
+        self.assertEqual(
+            data[u'data'],
+            [
+                {u'id': u'obj4'},
+                {u'id': u'obj5'},
+            ])
 
     @inlineCallbacks
     def test_get_usage_error(self):
