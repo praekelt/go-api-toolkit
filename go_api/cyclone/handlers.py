@@ -13,6 +13,7 @@ from twisted.python import log
 from cyclone.web import RequestHandler, Application, URLSpec, HTTPError
 
 from ..collections.errors import CollectionObjectNotFound, CollectionUsageError
+from ..queue.pausingdeferredqueue import PausingQueueCloseMarker
 
 
 class RouteParseError(Exception):
@@ -192,6 +193,7 @@ class BaseHandler(RequestHandler):
             # in debug mode, try to send a traceback
             error_data["traceback"] = traceback.format_exception(
                 *kw["exc_info"])
+
         self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.finish(json.dumps(error_data))
 
@@ -202,6 +204,7 @@ class BaseHandler(RequestHandler):
         :param dict obj:
             JSON serializable object to write out.
         """
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.write(json.dumps(obj))
 
     @inlineCallbacks
@@ -212,11 +215,12 @@ class BaseHandler(RequestHandler):
         :param list objs:
             List of dictionaries to write out.
         """
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
         for obj_deferred in objs:
             obj = yield obj_deferred
             if obj is None:
                 continue
-            yield self.write_object(obj)
+            self.write(json.dumps(obj))
             self.write("\n")
 
     def write_page(self, result):
@@ -234,7 +238,20 @@ class BaseHandler(RequestHandler):
             'cursor': cursor,
             'data': data,
         }
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.write(json.dumps(page))
+
+    @inlineCallbacks
+    def write_queue(self, q):
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
+        while True:
+            obj = yield q.get()
+            if obj is None:
+                continue
+            if isinstance(obj, PausingQueueCloseMarker):
+                break
+            self.write(json.dumps(obj))
+            self.write("\n")
 
     def parse_json(self, data):
         try:
@@ -267,7 +284,7 @@ class CollectionHandler(BaseHandler):
         stream = self.get_argument('stream', default='false')
         if stream == 'true':
             d = maybeDeferred(self.collection.stream, query=query)
-            d.addCallback(self.write_objects)
+            d.addCallback(self.write_queue)
         else:
             cursor = self.get_argument('cursor', default=None)
             max_results = self.get_argument('max_results', default=None)

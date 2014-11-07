@@ -5,9 +5,10 @@ import yaml
 
 from twisted.trial.unittest import TestCase
 from twisted.python.failure import Failure
-from twisted.internet.defer import inlineCallbacks, succeed, returnValue
+from twisted.internet.defer import (
+    maybeDeferred, inlineCallbacks, succeed, returnValue)
 
-from cyclone.web import HTTPError
+from cyclone.web import Application, HTTPError
 
 from go_api.collections import InMemoryCollection
 from go_api.collections.errors import CollectionUsageError
@@ -266,6 +267,54 @@ class TestBaseHandler(TestCase):
         self.assertEqual(handler.foo, "bar")
         self.assertEqual(handler.baz, "quux")
 
+    @inlineCallbacks
+    def _check_content_type(self, do_get, content_type):
+        class ToyHandler(BaseHandler):
+            get = do_get
+
+        helper = AppHelper(Application([
+            ('/', ToyHandler, {'model_factory': lambda _: None})
+        ]))
+
+        resp = yield helper.get('/')
+
+        self.assertEqual(
+            resp.headers.getRawHeaders('Content-Type'),
+            [content_type])
+
+    @inlineCallbacks
+    def test_write_error_content_type(self):
+        def fail():
+            raise DummyError("Moop")
+
+        def get(self):
+            d = maybeDeferred(fail)
+            d.addErrback(self.catch_err, 400, DummyError)
+            return d
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_object_content_type(self):
+        def get(self):
+            self.write_object({})
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_objects_content_type(self):
+        def get(self):
+            self.write_objects([{}, {}])
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
+    @inlineCallbacks
+    def test_write_page_content_type(self):
+        def get(self):
+            self.write_page(("cursor", {}))
+
+        yield self._check_content_type(get, 'application/json; charset=utf-8')
+
 
 class BaseHandlerTestCase(TestCase):
     @inlineCallbacks
@@ -285,6 +334,9 @@ class TestCollectionHandler(BaseHandlerTestCase):
         self.collection_data = {
             "obj1": {"id": "obj1"},
             "obj2": {"id": "obj2"},
+            "obj3": {"id": "obj3"},
+            "obj4": {"id": "obj4"},
+            "obj5": {"id": "obj5"},
         }
         self.collection = InMemoryCollection(self.collection_data)
         self.model_factory = lambda req: self.collection
@@ -299,7 +351,15 @@ class TestCollectionHandler(BaseHandlerTestCase):
     def test_get_stream(self):
         data = yield self.app_helper.get('/root/?stream=true',
                                          parser='json_lines')
-        self.assertEqual(data, [{"id": "obj1"}, {"id": "obj2"}])
+        self.assertEqual(
+            data,
+            [
+                {"id": "obj1"},
+                {"id": "obj2"},
+                {"id": "obj3"},
+                {"id": "obj4"},
+                {"id": "obj5"},
+            ])
 
     @inlineCallbacks
     def test_get_page(self):
@@ -310,6 +370,9 @@ class TestCollectionHandler(BaseHandlerTestCase):
             u'data': [
                 {u'id': u'obj1'},
                 {u'id': u'obj2'},
+                {u'id': u'obj3'},
+                {u'id': u'obj4'},
+                {u'id': u'obj5'},
             ],
         })
 
@@ -323,14 +386,25 @@ class TestCollectionHandler(BaseHandlerTestCase):
 
     @inlineCallbacks
     def test_get_page_multiple(self):
-        data = yield self.app_helper.get('/root/?max_results=1', parser='json')
-        self.assertEqual(data[u'cursor'], 1)
-        self.assertEqual(data[u'data'], [{u'id': u'obj1'}])
+        data = yield self.app_helper.get('/root/?max_results=3', parser='json')
+        self.assertEqual(data[u'cursor'], 3)
+        self.assertEqual(
+            data[u'data'],
+            [
+                {u'id': u'obj1'},
+                {u'id': u'obj2'},
+                {u'id': u'obj3'},
+            ])
 
-        data = yield self.app_helper.get('/root/?max_results=1&cursor=1',
+        data = yield self.app_helper.get('/root/?max_results=3&cursor=3',
                                          parser='json')
         self.assertEqual(data[u'cursor'], None)
-        self.assertEqual(data[u'data'], [{u'id': u'obj2'}])
+        self.assertEqual(
+            data[u'data'],
+            [
+                {u'id': u'obj4'},
+                {u'id': u'obj5'},
+            ])
 
     @inlineCallbacks
     def test_get_usage_error(self):

@@ -14,9 +14,10 @@ class ICollection(Interface):
 
     def stream(query):
         """
-        Return an iterable over all objects in the collection. The iterable may
-        contain deferreds instead of objects. May return a deferred instead of
-        the iterable.
+        Return a :class:`PausingDeferredQueue` of the objects in the
+        collection. May return a deferred instead of the
+        :class:`PausingDeferredQueue`. A queue item that is an instance of
+        :class:`PausingQueueCloseMarker` indicates the end of the queue.
 
         :param unicode query:
             Search term requested through the API. Defaults to ``None`` if no
