@@ -366,6 +366,21 @@ class ElementHandler(BaseHandler):
         return d
 
 
+def owner_from_static_value(owner):
+    """
+    Return a function that returns a static owner id.
+
+    :param str owner_id:
+       The owner ID. E.g. ``qa`` or ``prd``.
+
+    Typically used to build a factory that accepts an owner id instead of a
+    :class:`RequestHandler`::
+    """
+    def owner_factory(handler):
+        return owner
+    return owner_factory
+
+
 def owner_from_header(header):
     """
     Return a function that retrieves an owner id from the specified HTTP
@@ -482,6 +497,12 @@ class ApiApplication(Application):
         if auth_bouncer_url is not None:
             self.factory_preprocessor = (
                 owner_from_oauth2_bouncer(auth_bouncer_url))
+            return
+        static_owner_id = config.get('static_owner_id')
+        if static_owner_id is not None:
+            self.factory_preprocessor = (
+                owner_from_static_value(static_owner_id))
+            return
 
     def get_config_settings(self, config_file=None):
         return read_yaml_config(config_file)
