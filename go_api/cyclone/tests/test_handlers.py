@@ -16,7 +16,7 @@ from go_api.cyclone.handlers import (
     RouteParseError, BaseHandler, CollectionHandler, ElementHandler,
     duplicates, join_paths, parse_route_vars, create_urlspec_regex,
     ApiApplication, owner_from_header, owner_from_path_kwarg,
-    owner_from_oauth2_bouncer)
+    owner_from_oauth2_bouncer, owner_from_static_value)
 from go_api.cyclone.helpers import HandlerHelper, AppHelper, MockHttpServer
 
 
@@ -974,6 +974,27 @@ class TestApiApplication(TestCase):
             app.factory_preprocessor,
             ApiApplication.factory_preprocessor)
 
+    def test_configure_static_owner_id(self):
+        config_dict = {'static_owner_id': 'owner-foo'}
+
+        # Trial cleans this up for us.
+        tempfile = self.mktemp()
+        with open(tempfile, 'wb') as fp:
+            yaml.safe_dump(config_dict, fp)
+
+        # There's no easy way to test equality of closures, so we just assert
+        # that we don't have the default preprocessor.
+        app = ApiApplication(tempfile)
+        self.assertNotEqual(
+            app.factory_preprocessor,
+            ApiApplication.factory_preprocessor)
+
+        # With no config specified, we should have the default preprocessor.
+        app = ApiApplication()
+        self.assertEqual(
+            app.factory_preprocessor,
+            ApiApplication.factory_preprocessor)
+
     def test_configure_url_path_prefix(self):
         config_dict = {'url_path_prefix': '/foo/bar'}
 
@@ -1094,6 +1115,12 @@ class TestAuthHandlers(TestCase):
         # Rejects POST
         resp = yield treq.post(auth_server.url, persistent=False)
         self.assertEqual(resp.code, 405)
+
+    def test_owner_from_static_value(self):
+        preprocessor = owner_from_static_value("owner-1")
+        handler = self.dummy_helper.mk_handler()
+        owner_id = preprocessor(handler)
+        self.assertEqual(owner_id, "owner-1")
 
     def test_owner_from_header_with_value(self):
         preprocessor = owner_from_header("X-Owner-Id")
