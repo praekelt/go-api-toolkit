@@ -8,7 +8,7 @@ from twisted.python.failure import Failure
 from twisted.internet.defer import (
     maybeDeferred, inlineCallbacks, succeed, returnValue)
 
-from cyclone.web import Application, HTTPError
+from cyclone.web import Application, HTTPError, RequestHandler
 
 from go_api.collections import InMemoryCollection
 from go_api.collections.errors import CollectionUsageError
@@ -633,6 +633,7 @@ class TestApiApplication(TestCase):
                        collections=ApiApplication.collections,
                        models=ApiApplication.models,
                        preprocessor=ApiApplication.factory_preprocessor,
+                       health_handler=ApiApplication.health_handler,
                        config=None,
                        extra_settings=None):
         class MyApiApplication(ApiApplication):
@@ -640,6 +641,7 @@ class TestApiApplication(TestCase):
 
         MyApiApplication.collections = collections
         MyApiApplication.models = models
+        MyApiApplication.health_handler = health_handler
 
         if callable(preprocessor):
             preprocessor = staticmethod(preprocessor)
@@ -657,6 +659,19 @@ class TestApiApplication(TestCase):
         content = yield result.content()
         self.assertEqual(result.code, 200)
         self.assertEqual(content, "OK")
+
+    @inlineCallbacks
+    def test_custom_health_handler(self):
+
+        class FooHealthHandler(RequestHandler):
+            def get(self, *args, **kw):
+                self.write("FOO")
+
+        app_helper = self.get_app_helper(health_handler=FooHealthHandler)
+        result = yield app_helper.request('GET', '/health/')
+        content = yield result.content()
+        self.assertEqual(result.code, 200)
+        self.assertEqual(content, "FOO")
 
     @inlineCallbacks
     def test_process_collection_request_default_preprocessor(self):

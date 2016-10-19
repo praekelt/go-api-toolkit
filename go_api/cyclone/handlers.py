@@ -467,6 +467,7 @@ class ApiApplication(Application):
     """
 
     config_required = False
+    health_handler = HealthHandler
 
     models = ()
     collections = ()
@@ -525,6 +526,14 @@ class ApiApplication(Application):
             self._build_route(path_prefix, dfn, ElementHandler, factory)
             for dfn, factory in self.collections]
 
+    def _build_health_routes(self, path_prefix):
+        """
+        Build up routes for health checks, allows one to specify a different
+        HealthHandler which may want to be able to read the configuration
+        file the API was started with
+        """
+        return [URLSpec('/health/', self.health_handler)]
+
     def _build_collection_routes(self, path_prefix):
         """
         Build up routes for handlers.
@@ -546,7 +555,7 @@ class ApiApplication(Application):
         Build up routes for handlers from collections and
         extra routes.
         """
-        routes = [URLSpec('/health/', HealthHandler)]
+        routes = self._build_health_routes(path_prefix)
         routes.extend(self._build_collection_routes(path_prefix))
         routes.extend(self._build_element_routes(path_prefix))
         routes.extend(self._build_model_routes(path_prefix))
